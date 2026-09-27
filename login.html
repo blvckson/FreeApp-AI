@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FreeApp AI - Private Access</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<div class="container">
+
+    <h1>FreeApp AI</h1>
+
+    <p>Private AI development system</p>
+
+    <div id="login-panel">
+
+        <h2>Owner Access</h2>
+
+        <p>
+            This system is restricted to its owner.
+        </p>
+
+        <button id="github-login">
+            Continue with GitHub
+        </button>
+
+        <p id="login-status"></p>
+
+    </div>
+
+</div>
+
+<script>
+    const loginButton = document.getElementById("github-login");
+    const status = document.getElementById("login-status");
+
+    loginButton.addEventListener("click", function () {
+        status.textContent =
+            "GitHub authentication will be connected next.";
+    });
+</script>
+
+</body>
+</html>
