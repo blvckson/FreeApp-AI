@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FreeApp AI</title>
+</head>
+
+<body>
+
+    <h1>FreeApp AI</h1>
+
+    <p>Build apps with AI</p>
+
+    <textarea
+        id="prompt"
+        rows="8"
+        cols="40"
+        placeholder="Describe the app you want to build..."
+    ></textarea>
+
+    <br><br>
+
+    <button onclick="generateApp()">Build App</button>
+
+    <pre id="result"></pre>
+
+    <script>
+        function generateApp() {
+            const prompt = document.getElementById("prompt").value.trim();
+            const result = document.getElementById("result");
+
+            if (!prompt) {
+                result.textContent = "Please describe the app you want to build.";
+                return;
+            }
+
+            result.textContent =
+                "FreeApp AI received your request:\n\n" +
+                prompt +
+                "\n\nAI code generation will be connected next.";
+        }
+    </script>
+
+</body>
+</html>
