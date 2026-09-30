@@ -6,25 +6,21 @@
     <title>FreeApp AI</title>
     <link rel="stylesheet" href="style.css">
 </head>
-
 <body>
-    <div class="container">
-        <h1>FreeApp AI</h1>
+    <main class="container">
+        <header>
+            <h1>FreeApp AI</h1>
+            <p>Build and improve apps from plain-language instructions.</p>
+        </header>
 
-        <p>Build apps with AI</p>
-
-        <textarea
-            id="prompt"
-            rows="8"
-            cols="40"
-            placeholder="Describe the app you want to build..."
-        ></textarea>
-
-        <button id="build-button" type="button">Build App</button>
-
-        <pre id="result"></pre>
-    </div>
-
+        <section class="card">
+            <label for="prompt">What should FreeApp AI build or change?</label>
+            <textarea id="prompt" rows="9" placeholder="Example: Create an Android app that lets me track expenses..."></textarea>
+            <button id="build-button" type="button">Build / Modify App</button>
+            <div id="status" class="status" aria-live="polite"></div>
+            <pre id="result" aria-live="polite"></pre>
+        </section>
+    </main>
     <script src="app.js"></script>
 </body>
 </html>
