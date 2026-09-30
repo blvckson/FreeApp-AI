@@ -1,6 +1,7 @@
 const promptBox = document.getElementById("prompt");
 const resultBox = document.getElementById("result");
-const buildButton = document.querySelector("button");
+const statusBox = document.getElementById("status");
+const buildButton = document.getElementById("build-button");
 
 buildButton.addEventListener("click", buildProject);
 
@@ -8,46 +9,33 @@ async function buildProject() {
     const prompt = promptBox.value.trim();
 
     if (!prompt) {
-        resultBox.textContent = "Describe the app you want to build first.";
+        statusBox.textContent = "Enter an instruction first.";
         return;
     }
 
     buildButton.disabled = true;
-    buildButton.textContent = "Planning...";
-
-    resultBox.textContent =
-        "FreeApp AI is analyzing your request...\n\n" +
-        "Request:\n" +
-        prompt +
-        "\n\n" +
-        "Project planning started.";
+    statusBox.textContent = "FreeApp AI is processing your request...";
+    resultBox.textContent = "";
 
     try {
         const response = await fetch("/api/generate", {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                prompt: prompt
-            })
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ prompt })
         });
 
+        const data = await response.json().catch(() => ({}));
+
         if (!response.ok) {
-            throw new Error("AI service is not connected yet.");
+            throw new Error(data.error || "The AI service returned an error.");
         }
 
-        const data = await response.json();
-
-        resultBox.textContent =
-            data.result || "The AI returned no result.";
+        resultBox.textContent = data.result || "No response was returned.";
+        statusBox.textContent = "Done.";
     } catch (error) {
-        resultBox.textContent =
-            "AI engine is not connected yet.\n\n" +
-            "Your request has been received successfully.\n\n" +
-            "Next we will connect the actual AI code-generation engine.";
+        statusBox.textContent = "Request failed.";
+        resultBox.textContent = error.message;
+    } finally {
+        buildButton.disabled = false;
     }
-
-    buildButton.disabled = false;
-    buildButton.textContent = "Build App";
 }
