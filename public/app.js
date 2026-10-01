@@ -11,6 +11,120 @@ const buildButton = document.getElementById("build-button");
 
 let selectedImages = [];
 
+const narratorSettingsButton = document.getElementById("narrator-settings-button");
+const narratorModal = document.getElementById("narrator-modal");
+const narratorClose = document.getElementById("narrator-close");
+const narratorEnabled = document.getElementById("narrator-enabled");
+const narratorVoice = document.getElementById("narrator-voice");
+const narratorAudio = document.getElementById("narrator-audio");
+const narratorAudioStatus = document.getElementById("narrator-audio-status");
+const narratorAuto = document.getElementById("narrator-auto");
+const narratorSave = document.getElementById("narrator-save");
+const narratorTest = document.getElementById("narrator-test");
+const narratorNote = document.getElementById("narrator-note");
+
+let narratorAudioUrl = localStorage.getItem("freeapp_ai_narrator_audio") || "";
+let narratorAudioName = localStorage.getItem("freeapp_ai_narrator_audio_name") || "";
+const narratorDefaults = {
+  enabled: localStorage.getItem("freeapp_ai_narrator_enabled") === "true",
+  auto: localStorage.getItem("freeapp_ai_narrator_auto") === "true",
+  voice: localStorage.getItem("freeapp_ai_narrator_voice") || ""
+};
+
+function loadNarratorVoices() {
+  const voices = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
+  narratorVoice.replaceChildren();
+  for (const voice of voices) {
+    const option = document.createElement("option");
+    option.value = voice.name;
+    option.textContent = voice.name + (voice.lang ? " (" + voice.lang + ")" : "");
+    option.dataset.lang = voice.lang || "en";
+    narratorVoice.appendChild(option);
+  }
+  if (!narratorVoice.children.length) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = "Default device voice";
+    narratorVoice.appendChild(option);
+  }
+  if (narratorDefaults.voice && Array.from(narratorVoice.options).some(o => o.value === narratorDefaults.voice)) {
+    narratorVoice.value = narratorDefaults.voice;
+  }
+}
+
+function openNarratorSettings(firstOpen = false) {
+  loadNarratorVoices();
+  narratorEnabled.checked = narratorDefaults.enabled;
+  narratorAuto.checked = narratorDefaults.auto;
+  if (narratorAudioName) narratorAudioStatus.textContent = "Custom voice sample saved: " + narratorAudioName;
+  if (firstOpen) narratorNote.textContent = "Choose a voice to use for narration. You can change this later.";
+  narratorModal.hidden = false;
+}
+
+function closeNarratorSettings() {
+  narratorModal.hidden = true;
+}
+
+function saveNarratorSettings() {
+  localStorage.setItem("freeapp_ai_narrator_enabled", String(narratorEnabled.checked));
+  localStorage.setItem("freeapp_ai_narrator_auto", String(narratorAuto.checked));
+  localStorage.setItem("freeapp_ai_narrator_voice", narratorVoice.value || "");
+  if (narratorAudio.files?.[0]) {
+    const file = narratorAudio.files[0];
+    if (file.size > 8 * 1024 * 1024) {
+      narratorNote.textContent = "Voice sample is too large. Please choose an audio file under 8 MB.";
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        localStorage.setItem("freeapp_ai_narrator_audio", reader.result);
+        localStorage.setItem("freeapp_ai_narrator_audio_name", file.name);
+        narratorAudioUrl = reader.result;
+        narratorAudioName = file.name;
+        narratorAudioStatus.textContent = "Custom voice sample saved: " + file.name;
+        narratorNote.textContent = "Saved on this device. Custom voice cloning is provider-dependent; the selected device voice is used until a cloning provider is configured.";
+      } catch {
+        narratorNote.textContent = "The sample could not be stored on this device.";
+      }
+    };
+    reader.readAsDataURL(file);
+  } else {
+    narratorNote.textContent = "Narrator settings saved.";
+  }
+  narratorDefaults.enabled = narratorEnabled.checked;
+  narratorDefaults.auto = narratorAuto.checked;
+  narratorDefaults.voice = narratorVoice.value || "";
+  closeNarratorSettings();
+}
+
+function speakText(text) {
+  if (!narratorDefaults.enabled || !("speechSynthesis" in window)) return;
+  window.speechSynthesis.cancel();
+  const clean = String(text).replace(/https?:\/\/\S+/g, "").replace(/\[SOURCE \d+\]/g, "").slice(0, 12000);
+  if (!clean.trim()) return;
+  const utterance = new SpeechSynthesisUtterance(clean);
+  const voice = Array.from(window.speechSynthesis.getVoices()).find(v => v.name === narratorDefaults.voice);
+  if (voice) {
+    utterance.voice = voice;
+    utterance.lang = voice.lang;
+  }
+  utterance.rate = 1;
+  utterance.pitch = 1;
+  window.speechSynthesis.speak(utterance);
+}
+
+if (narratorSettingsButton) narratorSettingsButton.addEventListener("click", () => openNarratorSettings(false));
+if (narratorClose) narratorClose.addEventListener("click", closeNarratorSettings);
+if (narratorSave) narratorSave.addEventListener("click", saveNarratorSettings);
+if (narratorTest) narratorTest.addEventListener("click", () => speakText("Hello. I am your FreeApp AI narrator."));
+if (window.speechSynthesis) window.speechSynthesis.onvoiceschanged = loadNarratorVoices;
+
+if (!localStorage.getItem("freeapp_ai_narrator_setup_done")) {
+  localStorage.setItem("freeapp_ai_narrator_setup_done", "true");
+  setTimeout(() => openNarratorSettings(true), 300);
+}
+
 imageInput.addEventListener("change", () => {
   selectedImages = Array.from(imageInput.files || []).slice(0, 4);
   preview.replaceChildren();
@@ -94,6 +208,7 @@ async function askAI() {
     if (!response.ok) throw new Error(data.error || "The AI service returned an error.");
 
     resultBox.textContent = data.result || "No response was returned.";
+    if (narratorDefaults.auto || narratorDefaults.enabled) speakText(data.result || "No response was returned.");
 
     renderMedia(data.media);
     renderSources(data.sources);
