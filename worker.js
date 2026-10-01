@@ -114,9 +114,15 @@ export default {
 
       try {
         const token = await getGitHubInstallationToken(env);
-        const allowedPaths = ["worker.js", "public/index.html", "public/app.js", "public/style.css", "wrangler.toml"];
-        const requestedPath = extractRequestedPath(command, allowedPaths);
-        const paths = requestedPath ? [requestedPath] : ["worker.js", "public/app.js", "public/index.html"];
+        const allowedPaths = [
+          "worker.js", "public/index.html", "public/app.js", "public/style.css",
+          "public/voice/index.html", "public/voice/app.js", "public/voice/style.css",
+          "wrangler.toml"
+        ];
+        const requestedPaths = extractRequestedPaths(command, allowedPaths);
+        const paths = requestedPaths.length
+          ? requestedPaths
+          : ["worker.js", "public/app.js", "public/index.html"];
 
         const currentFiles = [];
         for (const path of paths) {
@@ -133,6 +139,10 @@ export default {
 The owner explicitly commanded this change. Modify ONLY the supplied repository files.
 Never add secrets, tokens, passwords, external credentials, hidden tracking, or unsafe remote-control behavior.
 Never modify GitHub workflows, authentication policy, or permissions.
+When the owner asks to change the application, implement the requested behavior in
+the supplied source files rather than merely describing how to do it.
+For narrator requests, preserve a working non-cloned original/local narrator fallback
+even if voice cloning is unavailable.
 Keep existing functionality unless the owner asked to change it.
 Return ONLY valid JSON with this exact shape:
 {"summary":"short summary","files":[{"path":"one of the supplied paths","content":"complete replacement file content"}],"notes":["short note"]}
@@ -160,7 +170,7 @@ ${currentFiles.map(f => "\n--- " + f.path + " ---\n" + f.content).join("\n")}
 
         const originalByPath = new Map(currentFiles.map(f => [f.path, f]));
         const changed = [];
-        for (const file of plan.files.slice(0, 3)) {
+        for (const file of plan.files.slice(0, 5)) {
           if (!file || !allowedPaths.includes(file.path) || typeof file.content !== "string") {
             throw new Error("Self-modification attempted an unsupported file path.");
           }
@@ -473,11 +483,24 @@ function encodePath(path) {
   return path.split("/").map(encodeURIComponent).join("/");
 }
 
-function extractRequestedPath(command, allowedPaths) {
-  for (const path of allowedPaths) {
-    if (command.includes(path)) return path;
+function extractRequestedPaths(command, allowedPaths) {
+  const found = allowedPaths.filter(path => command.includes(path));
+  if (found.length) return found.slice(0, 5);
+
+  const lower = command.toLowerCase();
+  const paths = [];
+
+  // Narrator/voice commands need the actual voice studio files in context.
+  if (/\b(narrator|voice|voice clone|cloning|tts|text[- ]to[- ]speech)\b/.test(lower)) {
+    paths.push("public/voice/index.html", "public/voice/app.js", "public/voice/style.css");
   }
-  return null;
+
+  // General application changes need the main UI and backend.
+  if (/\b(app|application|interface|ui|screen|feature|functionality|frontend|backend)\b/.test(lower)) {
+    paths.push("public/app.js", "public/index.html", "public/style.css", "worker.js");
+  }
+
+  return [...new Set(paths)].slice(0, 5);
 }
 
 function parseJsonObject(text) {
