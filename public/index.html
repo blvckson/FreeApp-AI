@@ -14,7 +14,7 @@
           <h1>FreeApp AI</h1>
           <p>Deep reasoning, live research, screenshots, images and videos.</p>
         </div>
-        <button id="narrator-settings-button" class="icon-button" type="button" aria-label="Narrator settings">🔊 Narrator</button>
+        <button id="narrator-settings-button" class="icon-button" type="button" aria-label="Narrator settings">🎙 Voice Clone</button>
       </div>
       </header>
     <section class="card">
@@ -40,36 +40,11 @@
   </main>
 
   <div id="narrator-modal" class="modal" hidden>
-    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="narrator-title">
+    <div class="modal-card voice-modal-card" role="dialog" aria-modal="true" aria-labelledby="narrator-title">
       <button id="narrator-close" class="modal-close" type="button" aria-label="Close">×</button>
-      <h2 id="narrator-title">Narrator</h2>
-      <p>Turn narration on and FreeApp AI can read its answers aloud. The first time you open this setting, choose a voice.</p>
-
-      <label class="switch-row">
-        <span>Enable narrator</span>
-        <input id="narrator-enabled" type="checkbox">
-      </label>
-
-      <label for="narrator-voice">Voice</label>
-      <select id="narrator-voice"></select>
-
-      <div class="voice-upload">
-        <strong>Use your own voice sample</strong>
-        <p class="small">Upload a voice recording, or an audio/song file you have permission to use. FreeApp AI can send the sample to the configured voice-cloning provider to create an AI voice clone. Use only a voice you own or have permission to clone. A clean 10+ second sample works best; songs with instruments/background voices may reduce clone quality.</p>
-        <input id="narrator-audio" type="file" accept="audio/*">
-        <button id="narrator-clone" type="button" class="secondary-button">Clone my voice with AI</button>
-        <div id="narrator-audio-status" class="small">No custom voice sample selected.</div>
-        <div class="small">Voice cloning uses MiniMax Speech 2.8 and requires the app owner to configure a MiniMax API key.</div>
-      </div>
-
-      <label class="switch-row">
-        <span>Narrate research answers automatically</span>
-        <input id="narrator-auto" type="checkbox">
-      </label>
-
-      <button id="narrator-save" type="button">Save narrator settings</button>
-      <button id="narrator-test" type="button" class="secondary-button">Test voice</button>
-      <div id="narrator-note" class="small"></div>
+      <h2 id="narrator-title">FreeApp AI Voice Clone</h2>
+      <p>Your voice-cloning studio runs locally inside the FreeApp AI app. Voice samples are processed on this device; no commercial voice-cloning API is used.</p>
+      <iframe id="voice-studio-frame" title="FreeApp AI local voice cloning studio" src="voice/index.html"></iframe>
     </div>
   </div>
 
