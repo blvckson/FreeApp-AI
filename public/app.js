@@ -47,7 +47,7 @@ async function askAI() {
     const images = [];
     for (const file of selectedImages) images.push(await toDataUrl(file));
 
-    const selfModify = /^(modify|upgrade|fix|change|improve|add) yourself\\b/i.test(prompt);
+    const selfModify = ["modify yourself", "upgrade yourself", "fix yourself", "change yourself", "improve yourself", "add yourself"].some(prefix => prompt.toLowerCase().startsWith(prefix));
     if (selfModify) {
       let ownerKey = localStorage.getItem("freeapp_ai_owner_key") || "";
       if (!ownerKey) {
