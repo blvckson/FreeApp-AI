@@ -5,6 +5,9 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Bundle;
+import android.speech.tts.TextToSpeech;
+import android.webkit.JavascriptInterface;
+import java.util.Locale;
 import android.Manifest;
 import android.webkit.PermissionRequest;
 import android.webkit.ValueCallback;
@@ -22,12 +25,25 @@ public class MainActivity extends Activity {
 
     private WebView webView;
     private ValueCallback<Uri[]> fileCallback;
+    private TextToSpeech textToSpeech;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        textToSpeech = new TextToSpeech(this, status -> {
+            if (status == TextToSpeech.SUCCESS) {
+                int result = textToSpeech.setLanguage(Locale.US);
+                if (result == TextToSpeech.LANG_MISSING_DATA ||
+                        result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                    textToSpeech.setLanguage(Locale.UK);
+                }
+            }
+        });
+
         webView = new WebView(this);
+        webView.addJavascriptInterface(new NativeNarrator(), "FreeAppNativeVoice");
+
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
@@ -132,6 +148,25 @@ public class MainActivity extends Activity {
         }
     }
 
+    private final class NativeNarrator {
+        @JavascriptInterface
+        public void speak(String text) {
+            if (textToSpeech == null || text == null || text.trim().isEmpty()) return;
+            runOnUiThread(() -> {
+                textToSpeech.setSpeechRate(1.0f);
+                textToSpeech.setPitch(0.98f);
+                textToSpeech.speak(text, TextToSpeech.QUEUE_FLUSH, null, "freeapp-narrator");
+            });
+        }
+
+        @JavascriptInterface
+        public void stop() {
+            if (textToSpeech != null) {
+                runOnUiThread(() -> textToSpeech.stop());
+            }
+        }
+    }
+
     @Override
     protected void onDestroy() {
         if (fileCallback != null) {
@@ -141,6 +176,11 @@ public class MainActivity extends Activity {
         if (webView != null) {
             webView.stopLoading();
             webView.destroy();
+        }
+        if (textToSpeech != null) {
+            textToSpeech.stop();
+            textToSpeech.shutdown();
+            textToSpeech = null;
         }
         super.onDestroy();
     }
