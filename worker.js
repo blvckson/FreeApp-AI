@@ -15,8 +15,9 @@ You are FreeApp AI, a high-capability research and software-building assistant.
 const DEFAULT_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 const FALLBACK_MODEL = "@cf/meta/llama-3.1-8b-instruct-fast";
 const MAX_PROMPT = 16000;
-const MAX_SOURCES = 5;
+const MAX_SOURCES = 10;
 const MAX_IMAGES = 4;
+const MAX_RESEARCH_QUERIES = 4;
 const MAX_SOURCE_CHARS = 8000;
 
 export default {
@@ -108,12 +109,21 @@ async function analyzeImages(env, images, prompt) {
   }
 
   try {
-    const r = await env.AI.run("@cf/llava-hf/llava-1.5-7b-hf", {
-      messages: [{ role: "user", content }]
+    const r = await env.AI.run("@cf/meta/llama-4-scout-17b-16e-instruct", {
+      messages: [{ role: "user", content }],
+      max_tokens: 4096,
+      temperature: 0.1
     });
     return "IMAGE ANALYSIS:\n" + (r?.response || "No image analysis was returned.");
   } catch {
-    return "IMAGE INPUT: Image was attached, but detailed image analysis was unavailable.";
+    try {
+      const r = await env.AI.run("@cf/llava-hf/llava-1.5-7b-hf", {
+        messages: [{ role: "user", content }]
+      });
+      return "IMAGE ANALYSIS:\n" + (r?.response || "No image analysis was returned.");
+    } catch {
+      return "IMAGE INPUT: Image was attached, but detailed image analysis was unavailable.";
+    }
   }
 }
 
@@ -130,6 +140,37 @@ function buildMedia(prompt, sources) {
 }
 
 async function researchWeb(query) {
+  const queries = buildResearchQueries(query).slice(0, MAX_RESEARCH_QUERIES);
+  const batches = await Promise.all(queries.map(searchDuckDuckGo));
+  const candidates = batches.flat();
+  const unique = [];
+  const seen = new Set();
+
+  for (const item of candidates) {
+    try {
+      const u = new URL(item.url);
+      const key = u.origin + u.pathname;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      unique.push(item);
+    } catch {}
+  }
+
+  const pages = await Promise.all(unique.slice(0, MAX_SOURCES).map(fetchPage));
+  return pages.filter(Boolean);
+}
+
+function buildResearchQueries(query) {
+  const q = query.trim();
+  return [
+    q,
+    q + " primary sources official documentation research",
+    q + " academic paper study evidence",
+    q + " government report statistics"
+  ];
+}
+
+async function searchDuckDuckGo(query) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 7000);
 
@@ -161,9 +202,7 @@ async function researchWeb(query) {
         }
       } catch {}
     }
-
-    const pages = await Promise.all(links.slice(0, MAX_SOURCES).map(fetchPage));
-    return pages.filter(Boolean);
+    return links;
   } catch {
     return [];
   } finally {
