@@ -10,14 +10,20 @@ const sourceList = document.getElementById("source-list");
 const buildButton = document.getElementById("build-button");
 
 let selectedImages = [];
+let autoNarration = false;
 
 const narratorSettingsButton = document.getElementById("narrator-settings-button");
 const narratorModal = document.getElementById("narrator-modal");
 const narratorClose = document.getElementById("narrator-close");
-if (narratorSettingsButton) narratorSettingsButton.addEventListener("click", () => { narratorModal.hidden = false; });
-if (narratorClose) narratorClose.addEventListener("click", () => { narratorModal.hidden = true; });
+if (narratorSettingsButton && narratorModal) {
+  narratorSettingsButton.addEventListener("click", () => { narratorModal.hidden = false; });
+}
+if (narratorClose && narratorModal) {
+  narratorClose.addEventListener("click", () => { narratorModal.hidden = true; });
+}
 
 const API_BASE = "https://freeapp-ai.lovesongmelodies.workers.dev";
+
 imageInput.addEventListener("change", () => {
   selectedImages = Array.from(imageInput.files || []).slice(0, 4);
   preview.replaceChildren();
@@ -44,7 +50,7 @@ async function askAI() {
   }
 
   buildButton.disabled = true;
-  statusBox.textContent = "Analyzing your request and researching relevant sources...";
+  statusBox.textContent = "FreeApp AI is processing your request...";
   resultBox.textContent = "";
   mediaBox.replaceChildren();
   sourceList.replaceChildren();
@@ -52,9 +58,16 @@ async function askAI() {
 
   try {
     const images = [];
-    for (const file of selectedImages) images.push(await toDataUrl(file));
+    for (const file of selectedImages) {
+      images.push(await toDataUrl(file));
+    }
 
-    const selfModify = ["modify yourself", "upgrade yourself", "fix yourself", "change yourself", "improve yourself", "add yourself"].some(prefix => prompt.toLowerCase().startsWith(prefix));
+    const lower = prompt.toLowerCase();
+    const selfModify = [
+      "modify yourself", "upgrade yourself", "fix yourself",
+      "change yourself", "improve yourself", "add yourself"
+    ].some(prefix => lower.startsWith(prefix));
+
     if (selfModify) {
       let ownerKey = localStorage.getItem("freeapp_ai_owner_key") || "";
       if (!ownerKey) {
@@ -63,7 +76,7 @@ async function askAI() {
       }
       if (!ownerKey) throw new Error("Owner key is required for self-modification.");
 
-      statusBox.textContent = "Owner command accepted — inspecting code and preparing the change...";
+      statusBox.textContent = "Owner command accepted — preparing the code change...";
       const response = await fetch(API_BASE + "/api/self-modify", {
         method: "POST",
         headers: {
@@ -79,14 +92,14 @@ async function askAI() {
       resultBox.textContent =
         (data.summary || "Self-modification completed.") +
         (Array.isArray(data.files) && data.files.length
-          ? "\\n\\nChanged: " + data.files.map(f => f.path).join(", ")
+          ? "\n\nChanged: " + data.files.map(f => f.path).join(", ")
           : "") +
         (Array.isArray(data.notes) && data.notes.length
-          ? "\\n\\nNotes:\\n- " + data.notes.join("\\n- ")
+          ? "\n\nNotes:\n- " + data.notes.join("\n- ")
           : "");
 
       statusBox.textContent = data.changed
-        ? "Self-modification committed to main. GitHub Actions should now build and deploy it."
+        ? "Change committed to GitHub. The build/deploy workflow can now run."
         : "No code change was necessary.";
       return;
     }
@@ -98,23 +111,29 @@ async function askAI() {
     });
 
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.error || "The AI service returned an error.");
-
-    resultBox.textContent = data.result || "No response was returned.";
-    if (narratorDefaults.auto || narratorDefaults.enabled) {
-      if (narratorVoiceId) await playServerNarration(data.result || "No response was returned.");
-      else speakText(data.result || "No response was returned.");
+    if (!response.ok) {
+      const detail = data.detail ? " " + data.detail : "";
+      throw new Error((data.error || "The AI service returned an error.") + detail);
     }
+
+    const answer = data.result || "No response was returned.";
+    resultBox.textContent = answer;
 
     renderMedia(data.media);
     renderSources(data.sources);
+
+    if (autoNarration) {
+      speakText(answer);
+    }
 
     statusBox.textContent = data.researched
       ? "Done — live research was used."
       : "Done.";
   } catch (error) {
     statusBox.textContent = "Request failed.";
-    resultBox.textContent = error.message;
+    resultBox.textContent = error && error.message
+      ? error.message
+      : "The AI request failed.";
   } finally {
     buildButton.disabled = false;
   }
@@ -165,6 +184,17 @@ function renderMedia(media) {
     }
     mediaBox.appendChild(wrap);
   }
+}
+
+function speakText(text) {
+  if (!("speechSynthesis" in window)) return;
+  try {
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+    window.speechSynthesis.speak(utterance);
+  } catch (_) {}
 }
 
 function toDataUrl(file) {
