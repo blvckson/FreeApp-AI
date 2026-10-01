@@ -15,10 +15,10 @@ You are FreeApp AI, a high-capability research and software-building assistant.
 const DEFAULT_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 const FALLBACK_MODEL = "@cf/meta/llama-3.1-8b-instruct-fast";
 const MAX_PROMPT = 16000;
-const MAX_SOURCES = 10;
+const MAX_SOURCES = 5;
 const MAX_IMAGES = 4;
 const MAX_RESEARCH_QUERIES = 4;
-const MAX_SOURCE_CHARS = 8000;
+const MAX_SOURCE_CHARS = 3500;
 
 export default {
   async fetch(request, env) {
@@ -66,7 +66,7 @@ export default {
         try {
           response = await env.AI.run(env.FREEAPP_AI_MODEL || DEFAULT_MODEL, {
             messages,
-            max_tokens: 6144,
+            max_tokens: 2048,
             temperature: 0.2
           });
         } catch {
