@@ -47,6 +47,43 @@ async function askAI() {
     const images = [];
     for (const file of selectedImages) images.push(await toDataUrl(file));
 
+    const selfModify = /^(modify|upgrade|fix|change|improve|add) yourself\\b/i.test(prompt);
+    if (selfModify) {
+      let ownerKey = localStorage.getItem("freeapp_ai_owner_key") || "";
+      if (!ownerKey) {
+        ownerKey = window.prompt("Enter your FreeApp AI owner key:");
+        if (ownerKey) localStorage.setItem("freeapp_ai_owner_key", ownerKey);
+      }
+      if (!ownerKey) throw new Error("Owner key is required for self-modification.");
+
+      statusBox.textContent = "Owner command accepted — inspecting code and preparing the change...";
+      const response = await fetch("/api/self-modify", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-FreeApp-Admin-Key": ownerKey
+        },
+        body: JSON.stringify({ command: prompt })
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Self-modification failed.");
+
+      resultBox.textContent =
+        (data.summary || "Self-modification completed.") +
+        (Array.isArray(data.files) && data.files.length
+          ? "\\n\\nChanged: " + data.files.map(f => f.path).join(", ")
+          : "") +
+        (Array.isArray(data.notes) && data.notes.length
+          ? "\\n\\nNotes:\\n- " + data.notes.join("\\n- ")
+          : "");
+
+      statusBox.textContent = data.changed
+        ? "Self-modification committed to main. GitHub Actions should now build and deploy it."
+        : "No code change was necessary.";
+      return;
+    }
+
     const response = await fetch("/api/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
