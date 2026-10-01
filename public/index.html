@@ -10,14 +10,23 @@
   <main class="container">
     <header>
       <h1>FreeApp AI</h1>
-      <p>Deep reasoning + live web research + practical answers.</p>
+      <p>Deep reasoning, live research, screenshots, images and videos.</p>
     </header>
     <section class="card">
       <label for="prompt">Ask FreeApp AI anything</label>
-      <textarea id="prompt" rows="9" placeholder="Ask a difficult question, request research, write code, debug an app, compare sources, or explain a complex topic..."></textarea>
+      <textarea id="prompt" rows="8" placeholder="Ask a complex question or attach a screenshot..."></textarea>
+      <div class="controls">
+        <label class="file-button">
+          📷 Add screenshot/image
+          <input id="image-input" type="file" accept="image/*" multiple hidden>
+        </label>
+        <span id="file-status">No image selected</span>
+      </div>
+      <div id="preview"></div>
       <button id="build-button" type="button">Ask FreeApp AI</button>
       <div id="status" class="status" aria-live="polite"></div>
-      <pre id="result" aria-live="polite"></pre>
+      <div id="result" aria-live="polite"></div>
+      <div id="media"></div>
       <div id="sources" class="sources" hidden>
         <strong>Web sources used</strong>
         <ul id="source-list"></ul>
