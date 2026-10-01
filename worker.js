@@ -147,7 +147,7 @@ async function fetchPage(item) {
     if (!response.ok) return null;
 
     const type = response.headers.get("content-type") || "";
-    if (!/text\\/(html|plain)|application\\/xhtml/i.test(type)) return null;
+    if (!type.includes("text/html") && !type.includes("text/plain") && !type.includes("application/xhtml")) return null;
 
     const text = extractText(await response.text()).slice(0, MAX_SOURCE_CHARS);
     if (text.length < 120) return null;
