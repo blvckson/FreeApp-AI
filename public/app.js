@@ -63,10 +63,10 @@ async function askAI() {
     }
 
     const lower = prompt.toLowerCase();
-    const selfModify = [
-      "modify yourself", "upgrade yourself", "fix yourself",
-      "change yourself", "improve yourself", "add yourself"
-    ].some(prefix => lower.startsWith(prefix));
+    // Route explicit app/code change requests to the owner-authorized
+    // self-modification pipeline even when the command is not phrased as
+    // "modify yourself".
+    const selfModify = isSelfModificationCommand(lower);
 
     if (selfModify) {
       let ownerKey = localStorage.getItem("freeapp_ai_owner_key") || "";
@@ -186,13 +186,37 @@ function renderMedia(media) {
   }
 }
 
+function isSelfModificationCommand(lower) {
+  const action = /\b(add|change|modify|update|upgrade|improve|fix|repair|remove|delete|replace|rewrite|redesign|build|create|implement|enable|disable)\b/.test(lower);
+  const target = /\b(app|application|project|code|source|feature|functionality|interface|ui|button|screen|narrator|voice|voice clone|self|freeapp|freeapp ai)\b/.test(lower);
+  const explicitSelf = /\b(modify yourself|upgrade yourself|fix yourself|change yourself|improve yourself|add yourself|update yourself)\b/.test(lower);
+  return explicitSelf || (action && target);
+}
+
 function speakText(text) {
+  // Prefer the app's native, device-local narrator when running inside the
+  // Android build. It requires no cloud voice API and works independently of
+  // browser voice availability.
+  if (window.FreeAppNativeVoice && typeof window.FreeAppNativeVoice.speak === "function") {
+    try {
+      window.FreeAppNativeVoice.speak(String(text).slice(0, 12000));
+      return;
+    } catch (_) {}
+  }
+
+  // Web Speech is the browser fallback for the web/PWA version.
   if (!("speechSynthesis" in window)) return;
   try {
     window.speechSynthesis.cancel();
+    const voices = window.speechSynthesis.getVoices();
+    const preferred = voices.find(v => /^en(-UG|-GB)?$/i.test(v.lang))
+      || voices.find(v => /^en/i.test(v.lang))
+      || null;
     const utterance = new SpeechSynthesisUtterance(text);
+    if (preferred) utterance.voice = preferred;
     utterance.rate = 1.0;
-    utterance.pitch = 1.0;
+    utterance.pitch = 0.95;
+    utterance.volume = 1.0;
     window.speechSynthesis.speak(utterance);
   } catch (_) {}
 }
