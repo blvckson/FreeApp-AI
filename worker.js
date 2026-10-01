@@ -166,7 +166,7 @@ function extractText(html) {
     " "
   );
   return decodeHtml(withoutBlocks.replace(new RegExp("<[^>]+>", "g"), " "))
-    .replace(/\\\\s+/g, " ")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
