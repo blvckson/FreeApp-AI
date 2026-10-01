@@ -55,9 +55,11 @@
 
       <div class="voice-upload">
         <strong>Use your own voice sample</strong>
-        <p class="small">Upload a voice recording, or an audio/song file you have permission to use. FreeApp AI will keep the sample on this device. AI voice cloning requires a compatible voice-cloning provider; the built-in narrator remains available without one.</p>
+        <p class="small">Upload a voice recording, or an audio/song file you have permission to use. FreeApp AI can send the sample to the configured voice-cloning provider to create an AI voice clone. Use only a voice you own or have permission to clone. A clean 10+ second sample works best; songs with instruments/background voices may reduce clone quality.</p>
         <input id="narrator-audio" type="file" accept="audio/*">
+        <button id="narrator-clone" type="button" class="secondary-button">Clone my voice with AI</button>
         <div id="narrator-audio-status" class="small">No custom voice sample selected.</div>
+        <div class="small">Voice cloning uses MiniMax Speech 2.8 and requires the app owner to configure a MiniMax API key.</div>
       </div>
 
       <label class="switch-row">
