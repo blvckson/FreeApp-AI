@@ -84,6 +84,23 @@ export default {
       }
     }
 
+    if (url.pathname === "/api/narrate") {
+      if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
+      let body;
+      try { body = await request.json(); } catch { return json({ error: "Invalid JSON request." }, 400); }
+      const text = typeof body.text === "string" ? body.text.trim().slice(0, 12000) : "";
+      const speaker = typeof body.speaker === "string" ? body.speaker : "luna";
+      if (!text) return json({ error: "Narration text is required." }, 400);
+      if (!env.AI) return json({ error: "Workers AI is not configured." }, 503);
+      try {
+        const audio = await env.AI.run("@cf/deepgram/aura-2-en", { text, speaker, encoding: "mp3" });
+        if (audio instanceof ReadableStream) return new Response(audio, { headers: { "Content-Type": "audio/mpeg", "Cache-Control": "no-store" } });
+        return json({ ok: true, audio });
+      } catch (error) {
+        return json({ error: "Narration failed.", detail: String(error?.message || error) }, 502);
+      }
+    }
+
     if (url.pathname === "/api/self-modify") {
       if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
 
