@@ -84,6 +84,113 @@ export default {
       }
     }
 
+    if (url.pathname === "/api/self-modify") {
+      if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
+
+      const ownerKey = request.headers.get("X-FreeApp-Admin-Key") || "";
+      if (!env.FREEAPP_ADMIN_KEY || ownerKey !== env.FREEAPP_ADMIN_KEY) {
+        return json({ error: "Owner authorization is required for self-modification." }, 401);
+      }
+
+      let body;
+      try { body = await request.json(); } catch {
+        return json({ error: "Invalid JSON request." }, 400);
+      }
+
+      const command = typeof body.command === "string" ? body.command.trim() : "";
+      if (!command) return json({ error: "Self-modification command is required." }, 400);
+      if (command.length > 8000) return json({ error: "Self-modification command is too long." }, 400);
+
+      if (!env.GITHUB_APP_ID || !env.GITHUB_INSTALLATION_ID || !env.GITHUB_APP_PRIVATE_KEY) {
+        return json({
+          error: "GitHub self-modification is not configured yet.",
+          required: ["GITHUB_APP_ID", "GITHUB_INSTALLATION_ID", "GITHUB_APP_PRIVATE_KEY", "FREEAPP_ADMIN_KEY"]
+        }, 503);
+      }
+
+      try {
+        const token = await getGitHubInstallationToken(env);
+        const allowedPaths = ["worker.js", "public/index.html", "public/app.js", "public/style.css", "wrangler.toml"];
+        const requestedPath = extractRequestedPath(command, allowedPaths);
+        const paths = requestedPath ? [requestedPath] : ["worker.js", "public/app.js", "public/index.html"];
+
+        const currentFiles = [];
+        for (const path of paths) {
+          const file = await githubRequest(token, "GET", "/repos/blvckson/FreeApp-AI/contents/" + encodePath(path) + "?ref=main");
+          if (!file?.content) throw new Error("Could not read " + path + " from GitHub.");
+          currentFiles.push({
+            path,
+            sha: file.sha,
+            content: decodeBase64Utf8(file.content)
+          });
+        }
+
+        const planningPrompt = `You are the self-modification engineer for FreeApp AI.
+The owner explicitly commanded this change. Modify ONLY the supplied repository files.
+Never add secrets, tokens, passwords, external credentials, hidden tracking, or unsafe remote-control behavior.
+Never modify GitHub workflows, authentication policy, or permissions.
+Keep existing functionality unless the owner asked to change it.
+Return ONLY valid JSON with this exact shape:
+{"summary":"short summary","files":[{"path":"one of the supplied paths","content":"complete replacement file content"}],"notes":["short note"]}
+
+OWNER COMMAND:
+${command}
+
+CURRENT FILES:
+${currentFiles.map(f => "\n--- " + f.path + " ---\n" + f.content).join("\n")}
+`;
+
+        let planResponse = await env.AI.run(env.FREEAPP_AI_MODEL || DEFAULT_MODEL, {
+          messages: [
+            { role: "system", content: "You produce safe, complete code changes as strict JSON. Do not use markdown fences." },
+            { role: "user", content: planningPrompt }
+          ],
+          max_tokens: 12000,
+          temperature: 0.1
+        });
+
+        const plan = parseJsonObject(planResponse?.response || "");
+        if (!plan || !Array.isArray(plan.files) || !plan.files.length) {
+          throw new Error("The AI did not return a valid self-modification plan.");
+        }
+
+        const originalByPath = new Map(currentFiles.map(f => [f.path, f]));
+        const changed = [];
+        for (const file of plan.files.slice(0, 3)) {
+          if (!file || !allowedPaths.includes(file.path) || typeof file.content !== "string") {
+            throw new Error("Self-modification attempted an unsupported file path.");
+          }
+          const original = originalByPath.get(file.path);
+          if (!original) throw new Error("Self-modification attempted to edit an unread file.");
+          if (file.content.length > 120000) throw new Error("Generated file is too large: " + file.path);
+          if (file.content === original.content) continue;
+
+          const result = await githubRequest(token, "PUT", "/repos/blvckson/FreeApp-AI/contents/" + encodePath(file.path), {
+            message: "FreeApp AI self-modification: " + (plan.summary || command).slice(0, 72),
+            content: encodeBase64Utf8(file.content),
+            sha: original.sha,
+            branch: "main"
+          });
+          changed.push({ path: file.path, commit: result?.commit?.sha || null });
+        }
+
+        if (!changed.length) {
+          return json({ ok: true, changed: false, summary: plan.summary || "No code change was necessary.", notes: plan.notes || [] });
+        }
+
+        return json({
+          ok: true,
+          changed: true,
+          summary: plan.summary || "Self-modification completed.",
+          files: changed,
+          notes: plan.notes || [],
+          next: "GitHub Actions should now build and deploy the new main-branch commit."
+        });
+      } catch (error) {
+        return json({ error: "Self-modification failed.", detail: String(error?.message || error) }, 502);
+      }
+    }
+
     if (url.pathname === "/api/health") {
       return json({
         ok: true,
@@ -134,7 +241,7 @@ function buildMedia(prompt, sources) {
 
   for (const s of sources) {
     if (imageHints) media.push({ type: "image", url: "https://images.weserv.nl/?url=" + encodeURIComponent(s.url), title: s.title });
-    if (videoHints && /youtube\\.com|youtu\\.be/i.test(s.url)) media.push({ type: "video", url: s.url, title: s.title });
+    if (videoHints && /\/youtube\.com|youtu\.be\/i/.test(s.url)) media.push({ type: "video", url: s.url, title: s.title });
   }
   return media.slice(0, 6);
 }
@@ -255,6 +362,129 @@ function decodeHtml(value) {
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&#(\\d+);/g, (_, n) => String.fromCharCode(Number(n)));
+}
+
+async function getGitHubInstallationToken(env) {
+  const now = Math.floor(Date.now() / 1000);
+  const header = base64url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
+  const payload = base64url(JSON.stringify({
+    iat: now - 60,
+    exp: now + 540,
+    iss: String(env.GITHUB_APP_ID)
+  }));
+  const key = await importPrivateKey(env.GITHUB_APP_PRIVATE_KEY);
+  const signature = await crypto.subtle.sign(
+    { name: "RSASSA-PKCS1-v1_5" },
+    key,
+    new TextEncoder().encode(header + "." + payload)
+  );
+  const jwt = header + "." + payload + "." + bytesToBase64url(new Uint8Array(signature));
+
+  const response = await fetch(
+    "https://api.github.com/app/installations/" + encodeURIComponent(env.GITHUB_INSTALLATION_ID) + "/access_tokens",
+    {
+      method: "POST",
+      headers: {
+        "Accept": "application/vnd.github+json",
+        "Authorization": "Bearer " + jwt,
+        "X-GitHub-Api-Version": "2026-03-10",
+        "User-Agent": "FreeApp-AI"
+      },
+      body: JSON.stringify({
+        repositories: ["FreeApp-AI"],
+        permissions: { contents: "write", pull_requests: "write", actions: "write" }
+      })
+    }
+  );
+  if (!response.ok) throw new Error("GitHub installation token request failed: " + response.status);
+  const data = await response.json();
+  if (!data.token) throw new Error("GitHub did not return an installation token.");
+  return data.token;
+}
+
+async function githubRequest(token, method, path, body) {
+  const response = await fetch("https://api.github.com" + path, {
+    method,
+    headers: {
+      "Accept": "application/vnd.github+json",
+      "Authorization": "Bearer " + token,
+      "X-GitHub-Api-Version": "2026-03-10",
+      "User-Agent": "FreeApp-AI",
+      ...(body ? { "Content-Type": "application/json" } : {})
+    },
+    body: body ? JSON.stringify(body) : undefined
+  });
+  const text = await response.text();
+  let data = {};
+  try { data = text ? JSON.parse(text) : {}; } catch {}
+  if (!response.ok) throw new Error("GitHub API " + method + " " + path + " failed: " + response.status + " " + (data.message || text.slice(0, 300)));
+  return data;
+}
+
+async function importPrivateKey(pem) {
+  const clean = pem.replace(/-----BEGIN PRIVATE KEY-----/g, "")
+    .replace(/-----END PRIVATE KEY-----/g, "")
+    .replace(/\s+/g, "");
+  const bytes = Uint8Array.from(atob(clean), c => c.charCodeAt(0));
+  return crypto.subtle.importKey(
+    "pkcs8",
+    bytes.buffer,
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+}
+
+function base64url(value) {
+  return bytesToBase64url(new TextEncoder().encode(value));
+}
+
+function bytesToBase64url(bytes) {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function encodeBase64Utf8(value) {
+  return bytesToBase64(new TextEncoder().encode(value));
+}
+
+function bytesToBase64(bytes) {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(binary);
+}
+
+function decodeBase64Utf8(value) {
+  const binary = atob(value.replace(/\s/g, ""));
+  const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
+
+function encodePath(path) {
+  return path.split("/").map(encodeURIComponent).join("/");
+}
+
+function extractRequestedPath(command, allowedPaths) {
+  for (const path of allowedPaths) {
+    if (command.includes(path)) return path;
+  }
+  return null;
+}
+
+function parseJsonObject(text) {
+  const cleaned = String(text).trim().replace(/^\`\`\`(?:json)?/i, "").replace(/\`\`\`$/i, "").trim();
+  try { return JSON.parse(cleaned); } catch {}
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+  if (start >= 0 && end > start) {
+    try { return JSON.parse(cleaned.slice(start, end + 1)); } catch {}
+  }
+  return null;
 }
 
 function json(data, status = 200) {
