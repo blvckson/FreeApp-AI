@@ -161,14 +161,13 @@ async function fetchPage(item) {
 }
 
 function extractText(html) {
-  return decodeHtml(
-    html
-      .replace(/<script[\\s\\S]*?<\\/script>/gi, " ")
-      .replace(/<style[\\s\\S]*?<\\/style>/gi, " ")
-      .replace(/<noscript[\\s\\S]*?<\\/noscript>/gi, " ")
-      .replace(/<svg[\\s\\S]*?<\\/svg>/gi, " ")
-      .replace(/<[^>]+>/g, " ")
-  ).replace(/\\s+/g, " ").trim();
+  const withoutBlocks = html.replace(
+    new RegExp("<(?:script|style|noscript|svg)\\\\b[\\\\s\\\\S]*?</(?:script|style|noscript|svg)>", "gi"),
+    " "
+  );
+  return decodeHtml(withoutBlocks.replace(new RegExp("<[^>]+>", "g"), " "))
+    .replace(/\\\\s+/g, " ")
+    .trim();
 }
 
 function cleanText(value) { return extractText(value); }
