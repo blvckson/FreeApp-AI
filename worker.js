@@ -106,7 +106,7 @@ async function researchWeb(query) {
 
     const html = await response.text();
     const links = [];
-    const re = /<a[^>]*class="[^"]*result__a[^"]*"[^>]*href="([^"]+)"[^>]*>([\\s\\S]*?)<\\/a>/gi;
+    const re = new RegExp(`<a[^>]*class="[^"]*result__a[^"]*"[^>]*href="([^"]+)"[^>]*>([\\s\\S]*?)</a>`, "gi");
     let m;
 
     while ((m = re.exec(html)) && links.length < 8) {
