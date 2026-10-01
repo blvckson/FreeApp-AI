@@ -14,169 +14,10 @@ let selectedImages = [];
 const narratorSettingsButton = document.getElementById("narrator-settings-button");
 const narratorModal = document.getElementById("narrator-modal");
 const narratorClose = document.getElementById("narrator-close");
-const narratorEnabled = document.getElementById("narrator-enabled");
-const narratorVoice = document.getElementById("narrator-voice");
-const narratorAudio = document.getElementById("narrator-audio");
-const narratorAudioStatus = document.getElementById("narrator-audio-status");
-const narratorAuto = document.getElementById("narrator-auto");
-const narratorSave = document.getElementById("narrator-save");
-const narratorTest = document.getElementById("narrator-test");
-const narratorClone = document.getElementById("narrator-clone");
-const narratorNote = document.getElementById("narrator-note");
+if (narratorSettingsButton) narratorSettingsButton.addEventListener("click", () => { narratorModal.hidden = false; });
+if (narratorClose) narratorClose.addEventListener("click", () => { narratorModal.hidden = true; });
 
-let narratorAudioUrl = localStorage.getItem("freeapp_ai_narrator_audio") || "";
-let narratorAudioName = localStorage.getItem("freeapp_ai_narrator_audio_name") || "";
-let narratorVoiceId = localStorage.getItem("freeapp_ai_narrator_voice_id") || "";
-const narratorDefaults = {
-  enabled: localStorage.getItem("freeapp_ai_narrator_enabled") === "true",
-  auto: localStorage.getItem("freeapp_ai_narrator_auto") === "true",
-  voice: localStorage.getItem("freeapp_ai_narrator_voice") || ""
-};
-
-function loadNarratorVoices() {
-  const voices = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
-  narratorVoice.replaceChildren();
-  for (const voice of voices) {
-    const option = document.createElement("option");
-    option.value = voice.name;
-    option.textContent = voice.name + (voice.lang ? " (" + voice.lang + ")" : "");
-    option.dataset.lang = voice.lang || "en";
-    narratorVoice.appendChild(option);
-  }
-  if (!narratorVoice.children.length) {
-    const option = document.createElement("option");
-    option.value = "";
-    option.textContent = "Default device voice";
-    narratorVoice.appendChild(option);
-  }
-  if (narratorDefaults.voice && Array.from(narratorVoice.options).some(o => o.value === narratorDefaults.voice)) {
-    narratorVoice.value = narratorDefaults.voice;
-  }
-}
-
-function openNarratorSettings(firstOpen = false) {
-  loadNarratorVoices();
-  narratorEnabled.checked = narratorDefaults.enabled;
-  narratorAuto.checked = narratorDefaults.auto;
-  if (narratorAudioName) narratorAudioStatus.textContent = "Custom voice sample saved: " + narratorAudioName;
-  if (firstOpen) narratorNote.textContent = "Choose a voice to use for narration. You can also upload your own voice and create an AI clone.";
-  narratorModal.hidden = false;
-}
-
-function closeNarratorSettings() {
-  narratorModal.hidden = true;
-}
-
-async function cloneNarratorVoice() {
-  const file = narratorAudio.files?.[0];
-  if (!file) { narratorNote.textContent = "Choose a voice recording first."; return; }
-  if (file.size > 8 * 1024 * 1024) { narratorNote.textContent = "Voice sample is too large. Please choose an audio file under 8 MB."; return; }
-  narratorClone.disabled = true;
-  narratorNote.textContent = "Uploading the sample and creating the AI voice clone...";
-  try {
-    const audio = await toDataUrl(file);
-    const response = await fetch("/api/voice-clone", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ audio, voiceName: "My FreeApp Narrator" })
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.error || "Voice cloning failed.");
-    narratorVoiceId = data.voiceId || "";
-    if (!narratorVoiceId) throw new Error("No cloned voice ID was returned.");
-    localStorage.setItem("freeapp_ai_narrator_voice_id", narratorVoiceId);
-    narratorNote.textContent = "AI voice cloned successfully. FreeApp AI will now use this voice for server narration.";
-    narratorAudioStatus.textContent = "Cloned voice ready: " + (data.voiceName || "My FreeApp Narrator");
-  } catch (error) {
-    narratorNote.textContent = error.message;
-  } finally {
-    narratorClone.disabled = false;
-  }
-}
-
-function saveNarratorSettings() {
-  localStorage.setItem("freeapp_ai_narrator_enabled", String(narratorEnabled.checked));
-  localStorage.setItem("freeapp_ai_narrator_auto", String(narratorAuto.checked));
-  localStorage.setItem("freeapp_ai_narrator_voice", narratorVoice.value || "");
-  if (narratorAudio.files?.[0]) {
-    const file = narratorAudio.files[0];
-    if (file.size > 8 * 1024 * 1024) {
-      narratorNote.textContent = "Voice sample is too large. Please choose an audio file under 8 MB.";
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        localStorage.setItem("freeapp_ai_narrator_audio", reader.result);
-        localStorage.setItem("freeapp_ai_narrator_audio_name", file.name);
-        narratorAudioUrl = reader.result;
-        narratorAudioName = file.name;
-        narratorAudioStatus.textContent = "Custom voice sample saved: " + file.name;
-        narratorNote.textContent = narratorVoiceId ? "Narrator settings saved. Your AI-cloned voice is ready." : "Saved on this device. You can create an AI voice clone with the Clone my voice button.";
-      } catch {
-        narratorNote.textContent = "The sample could not be stored on this device.";
-      }
-    };
-    reader.readAsDataURL(file);
-  } else {
-    narratorNote.textContent = "Narrator settings saved.";
-  }
-  narratorDefaults.enabled = narratorEnabled.checked;
-  narratorDefaults.auto = narratorAuto.checked;
-  narratorDefaults.voice = narratorVoice.value || "";
-  if (narratorVoiceId) localStorage.setItem("freeapp_ai_narrator_voice_id", narratorVoiceId);
-  closeNarratorSettings();
-}
-
-async function playServerNarration(text) {
-  try {
-    const response = await fetch("/api/narrate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: String(text).slice(0, 10000), voiceId: narratorVoiceId })
-    });
-    if (!response.ok) throw new Error("Server narration failed.");
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-    const audio = new Audio(url);
-    audio.onended = () => URL.revokeObjectURL(url);
-    await audio.play();
-  } catch {
-    speakText(text);
-  }
-}
-
-function speakText(text) {
-  if (!narratorDefaults.enabled || !("speechSynthesis" in window)) return;
-  window.speechSynthesis.cancel();
-  const clean = String(text).replace(/https?:\/\/\S+/g, "").replace(/\[SOURCE \d+\]/g, "").slice(0, 12000);
-  if (!clean.trim()) return;
-  const utterance = new SpeechSynthesisUtterance(clean);
-  const voice = Array.from(window.speechSynthesis.getVoices()).find(v => v.name === narratorDefaults.voice);
-  if (voice) {
-    utterance.voice = voice;
-    utterance.lang = voice.lang;
-  }
-  utterance.rate = 1;
-  utterance.pitch = 1;
-  window.speechSynthesis.speak(utterance);
-}
-
-if (narratorSettingsButton) narratorSettingsButton.addEventListener("click", () => openNarratorSettings(false));
-if (narratorClose) narratorClose.addEventListener("click", closeNarratorSettings);
-if (narratorSave) narratorSave.addEventListener("click", saveNarratorSettings);
-if (narratorTest) narratorTest.addEventListener("click", async () => {
-  if (narratorVoiceId) await playServerNarration("Hello. I am your FreeApp AI narrator.");
-  else speakText("Hello. I am your FreeApp AI narrator.");
-});
-if (narratorClone) narratorClone.addEventListener("click", cloneNarratorVoice);
-if (window.speechSynthesis) window.speechSynthesis.onvoiceschanged = loadNarratorVoices;
-
-if (!localStorage.getItem("freeapp_ai_narrator_setup_done")) {
-  localStorage.setItem("freeapp_ai_narrator_setup_done", "true");
-  setTimeout(() => openNarratorSettings(true), 300);
-}
-
+const API_BASE = "https://freeapp-ai.lovesongmelodies.workers.dev";
 imageInput.addEventListener("change", () => {
   selectedImages = Array.from(imageInput.files || []).slice(0, 4);
   preview.replaceChildren();
@@ -223,7 +64,7 @@ async function askAI() {
       if (!ownerKey) throw new Error("Owner key is required for self-modification.");
 
       statusBox.textContent = "Owner command accepted — inspecting code and preparing the change...";
-      const response = await fetch("/api/self-modify", {
+      const response = await fetch(API_BASE + "/api/self-modify", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -250,7 +91,7 @@ async function askAI() {
       return;
     }
 
-    const response = await fetch("/api/generate", {
+    const response = await fetch(API_BASE + "/api/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ prompt, images })
