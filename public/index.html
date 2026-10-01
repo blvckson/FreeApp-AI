@@ -1,25 +1,29 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FreeApp AI</title>
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FreeApp AI</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <main class="container">
-        <header>
-            <h1>FreeApp AI</h1>
-            <p>Build and improve apps from plain-language instructions.</p>
-        </header>
-        <section class="card">
-            <label for="prompt">What should FreeApp AI build or change?</label>
-            <textarea id="prompt" rows="9" placeholder="Example: Create an Android app that lets me track expenses..."></textarea>
-            <button id="build-button" type="button">Build / Modify App</button>
-            <div id="status" class="status" aria-live="polite"></div>
-            <pre id="result" aria-live="polite"></pre>
-        </section>
-    </main>
-    <script src="app.js"></script>
+  <main class="container">
+    <header>
+      <h1>FreeApp AI</h1>
+      <p>Deep reasoning + live web research + practical answers.</p>
+    </header>
+    <section class="card">
+      <label for="prompt">Ask FreeApp AI anything</label>
+      <textarea id="prompt" rows="9" placeholder="Ask a difficult question, request research, write code, debug an app, compare sources, or explain a complex topic..."></textarea>
+      <button id="build-button" type="button">Ask FreeApp AI</button>
+      <div id="status" class="status" aria-live="polite"></div>
+      <pre id="result" aria-live="polite"></pre>
+      <div id="sources" class="sources" hidden>
+        <strong>Web sources used</strong>
+        <ul id="source-list"></ul>
+      </div>
+    </section>
+  </main>
+  <script src="app.js"></script>
 </body>
 </html>
