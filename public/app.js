@@ -21,10 +21,12 @@ const narratorAudioStatus = document.getElementById("narrator-audio-status");
 const narratorAuto = document.getElementById("narrator-auto");
 const narratorSave = document.getElementById("narrator-save");
 const narratorTest = document.getElementById("narrator-test");
+const narratorClone = document.getElementById("narrator-clone");
 const narratorNote = document.getElementById("narrator-note");
 
 let narratorAudioUrl = localStorage.getItem("freeapp_ai_narrator_audio") || "";
 let narratorAudioName = localStorage.getItem("freeapp_ai_narrator_audio_name") || "";
+let narratorVoiceId = localStorage.getItem("freeapp_ai_narrator_voice_id") || "";
 const narratorDefaults = {
   enabled: localStorage.getItem("freeapp_ai_narrator_enabled") === "true",
   auto: localStorage.getItem("freeapp_ai_narrator_auto") === "true",
@@ -57,12 +59,39 @@ function openNarratorSettings(firstOpen = false) {
   narratorEnabled.checked = narratorDefaults.enabled;
   narratorAuto.checked = narratorDefaults.auto;
   if (narratorAudioName) narratorAudioStatus.textContent = "Custom voice sample saved: " + narratorAudioName;
-  if (firstOpen) narratorNote.textContent = "Choose a voice to use for narration. You can change this later.";
+  if (firstOpen) narratorNote.textContent = "Choose a voice to use for narration. You can also upload your own voice and create an AI clone.";
   narratorModal.hidden = false;
 }
 
 function closeNarratorSettings() {
   narratorModal.hidden = true;
+}
+
+async function cloneNarratorVoice() {
+  const file = narratorAudio.files?.[0];
+  if (!file) { narratorNote.textContent = "Choose a voice recording first."; return; }
+  if (file.size > 8 * 1024 * 1024) { narratorNote.textContent = "Voice sample is too large. Please choose an audio file under 8 MB."; return; }
+  narratorClone.disabled = true;
+  narratorNote.textContent = "Uploading the sample and creating the AI voice clone...";
+  try {
+    const audio = await toDataUrl(file);
+    const response = await fetch("/api/voice-clone", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ audio, voiceName: "My FreeApp Narrator" })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || "Voice cloning failed.");
+    narratorVoiceId = data.voiceId || "";
+    if (!narratorVoiceId) throw new Error("No cloned voice ID was returned.");
+    localStorage.setItem("freeapp_ai_narrator_voice_id", narratorVoiceId);
+    narratorNote.textContent = "AI voice cloned successfully. FreeApp AI will now use this voice for server narration.";
+    narratorAudioStatus.textContent = "Cloned voice ready: " + (data.voiceName || "My FreeApp Narrator");
+  } catch (error) {
+    narratorNote.textContent = error.message;
+  } finally {
+    narratorClone.disabled = false;
+  }
 }
 
 function saveNarratorSettings() {
@@ -83,7 +112,7 @@ function saveNarratorSettings() {
         narratorAudioUrl = reader.result;
         narratorAudioName = file.name;
         narratorAudioStatus.textContent = "Custom voice sample saved: " + file.name;
-        narratorNote.textContent = "Saved on this device. Custom voice cloning is provider-dependent; the selected device voice is used until a cloning provider is configured.";
+        narratorNote.textContent = narratorVoiceId ? "Narrator settings saved. Your AI-cloned voice is ready." : "Saved on this device. You can create an AI voice clone with the Clone my voice button.";
       } catch {
         narratorNote.textContent = "The sample could not be stored on this device.";
       }
@@ -95,7 +124,26 @@ function saveNarratorSettings() {
   narratorDefaults.enabled = narratorEnabled.checked;
   narratorDefaults.auto = narratorAuto.checked;
   narratorDefaults.voice = narratorVoice.value || "";
+  if (narratorVoiceId) localStorage.setItem("freeapp_ai_narrator_voice_id", narratorVoiceId);
   closeNarratorSettings();
+}
+
+async function playServerNarration(text) {
+  try {
+    const response = await fetch("/api/narrate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: String(text).slice(0, 10000), voiceId: narratorVoiceId })
+    });
+    if (!response.ok) throw new Error("Server narration failed.");
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    audio.onended = () => URL.revokeObjectURL(url);
+    await audio.play();
+  } catch {
+    speakText(text);
+  }
 }
 
 function speakText(text) {
@@ -117,7 +165,11 @@ function speakText(text) {
 if (narratorSettingsButton) narratorSettingsButton.addEventListener("click", () => openNarratorSettings(false));
 if (narratorClose) narratorClose.addEventListener("click", closeNarratorSettings);
 if (narratorSave) narratorSave.addEventListener("click", saveNarratorSettings);
-if (narratorTest) narratorTest.addEventListener("click", () => speakText("Hello. I am your FreeApp AI narrator."));
+if (narratorTest) narratorTest.addEventListener("click", async () => {
+  if (narratorVoiceId) await playServerNarration("Hello. I am your FreeApp AI narrator.");
+  else speakText("Hello. I am your FreeApp AI narrator.");
+});
+if (narratorClone) narratorClone.addEventListener("click", cloneNarratorVoice);
 if (window.speechSynthesis) window.speechSynthesis.onvoiceschanged = loadNarratorVoices;
 
 if (!localStorage.getItem("freeapp_ai_narrator_setup_done")) {
@@ -208,7 +260,10 @@ async function askAI() {
     if (!response.ok) throw new Error(data.error || "The AI service returned an error.");
 
     resultBox.textContent = data.result || "No response was returned.";
-    if (narratorDefaults.auto || narratorDefaults.enabled) speakText(data.result || "No response was returned.");
+    if (narratorDefaults.auto || narratorDefaults.enabled) {
+      if (narratorVoiceId) await playServerNarration(data.result || "No response was returned.");
+      else speakText(data.result || "No response was returned.");
+    }
 
     renderMedia(data.media);
     renderSources(data.sources);
