@@ -16,6 +16,7 @@ const DEFAULT_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 const FALLBACK_MODEL = "@cf/meta/llama-3.1-8b-instruct-fast";
 const MAX_PROMPT = 16000;
 const MAX_SOURCES = 5;
+const MAX_IMAGES = 4;
 const MAX_SOURCE_CHARS = 8000;
 
 export default {
@@ -31,6 +32,7 @@ export default {
       }
 
       const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
+      const images = Array.isArray(body.images) ? body.images.slice(0, MAX_IMAGES) : [];
       if (!prompt) return json({ error: "Prompt is required." }, 400);
       if (prompt.length > MAX_PROMPT) {
         return json({ error: `Prompt is too long. Maximum is ${MAX_PROMPT} characters.` }, 400);
@@ -40,12 +42,13 @@ export default {
       }
 
       try {
+        const imageContext = await analyzeImages(env, images, prompt);
         const sources = await researchWeb(prompt);
-        const evidence = sources.length
+        const evidence = imageContext + "\n\n" + (sources.length
           ? "LIVE WEB RESEARCH:\n" + sources.map((s, i) =>
               `[SOURCE ${i + 1}] ${s.title}\nURL: ${s.url}\n${s.text}`
             ).join("\n\n")
-          : "LIVE WEB RESEARCH: No usable web pages were retrieved. Do not pretend that current information was verified.";
+          : "LIVE WEB RESEARCH: No usable web pages were retrieved. Do not pretend that current information was verified.");
 
         const messages = [
           { role: "system", content: SYSTEM_PROMPT },
@@ -71,6 +74,7 @@ export default {
 
         return json({
           result: response?.response || "The AI returned no text.",
+          media: buildMedia(prompt, sources),
           researched: sources.length > 0,
           sources: sources.map(s => ({ title: s.title, url: s.url }))
         });
@@ -92,6 +96,38 @@ export default {
     return env.ASSETS.fetch(request);
   }
 };
+
+async function analyzeImages(env, images, prompt) {
+  if (!images.length) return "IMAGE INPUT: No image was attached.";
+  if (!env.AI) return "IMAGE INPUT: Image attached, but AI image analysis is unavailable.";
+
+  const content = [{ type: "text", text: "Analyze the attached image(s) for this user request. Extract visible text, objects, UI details, errors, diagrams and other relevant evidence. Do not guess when unreadable. User request: " + prompt }];
+  for (const dataUrl of images) {
+    if (typeof dataUrl !== "string" || !dataUrl.startsWith("data:image/")) continue;
+    content.push({ type: "image_url", image_url: { url: dataUrl } });
+  }
+
+  try {
+    const r = await env.AI.run("@cf/llava-hf/llava-1.5-7b-hf", {
+      messages: [{ role: "user", content }]
+    });
+    return "IMAGE ANALYSIS:\n" + (r?.response || "No image analysis was returned.");
+  } catch {
+    return "IMAGE INPUT: Image was attached, but detailed image analysis was unavailable.";
+  }
+}
+
+function buildMedia(prompt, sources) {
+  const media = [];
+  const imageHints = /(image|picture|photo|diagram|screenshot|visual|show me|illustrat)/i.test(prompt);
+  const videoHints = /(video|watch|tutorial|demonstrat|footage|how to)/i.test(prompt);
+
+  for (const s of sources) {
+    if (imageHints) media.push({ type: "image", url: "https://images.weserv.nl/?url=" + encodeURIComponent(s.url), title: s.title });
+    if (videoHints && /youtube\\.com|youtu\\.be/i.test(s.url)) media.push({ type: "video", url: s.url, title: s.title });
+  }
+  return media.slice(0, 6);
+}
 
 async function researchWeb(query) {
   const controller = new AbortController();
