@@ -84,15 +84,120 @@ export default {
       }
     }
 
+    if (url.pathname === "/api/voice-clone") {
+      if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
+      if (!env.MINIMAX_API_KEY) return json({ error: "Voice cloning is not configured yet. Add the MINIMAX_API_KEY Worker secret." }, 503);
+
+      let body;
+      try { body = await request.json(); } catch { return json({ error: "Invalid JSON request." }, 400); }
+
+      const audioDataUrl = typeof body.audio === "string" ? body.audio : "";
+      const voiceName = typeof body.voiceName === "string" ? body.voiceName.trim().slice(0, 80) : "FreeAppNarrator";
+      if (!audioDataUrl.startsWith("data:audio/")) return json({ error: "Please upload an audio recording." }, 400);
+      if (audioDataUrl.length > 12 * 1024 * 1024) return json({ error: "Voice sample is too large. Maximum is 8 MB." }, 413);
+
+      try {
+        const comma = audioDataUrl.indexOf(",");
+        if (comma < 0) throw new Error("Invalid audio data.");
+        const meta = audioDataUrl.slice(0, comma);
+        const encoded = audioDataUrl.slice(comma + 1);
+        const mime = (meta.match(/^data:([^;]+)/i) || [])[1] || "audio/mpeg";
+        const bytes = Uint8Array.from(atob(encoded), c => c.charCodeAt(0));
+        const extension = mime.includes("wav") ? "wav" : mime.includes("m4a") || mime.includes("mp4") ? "m4a" : "mp3";
+
+        const form = new FormData();
+        form.append("purpose", "voice_clone");
+        form.append("file", new File([bytes], "freeapp-voice." + extension, { type: mime }));
+
+        const upload = await fetch("https://api.minimax.io/v1/files/upload", {
+          method: "POST",
+          headers: { "Authorization": "Bearer " + env.MINIMAX_API_KEY },
+          body: form
+        });
+        const uploadText = await upload.text();
+        let uploadData = {};
+        try { uploadData = JSON.parse(uploadText); } catch {}
+        if (!upload.ok || uploadData?.base_resp?.status_code > 0) {
+          throw new Error("MiniMax audio upload failed: " + (uploadData?.base_resp?.status_msg || uploadText.slice(0, 300)));
+        }
+
+        const fileId = uploadData?.file?.file_id ?? uploadData?.file_id;
+        if (fileId === undefined || fileId === null) throw new Error("MiniMax did not return a file ID.");
+
+        const safeVoiceId = ("FreeApp_" + voiceName.replace(/[^A-Za-z0-9_-]/g, "_") + "_" + crypto.randomUUID().slice(0, 8)).slice(0, 128);
+        const clone = await fetch("https://api.minimax.io/v1/voice_clone", {
+          method: "POST",
+          headers: {
+            "Authorization": "Bearer " + env.MINIMAX_API_KEY,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            file_id: Number(fileId),
+            voice_id: safeVoiceId,
+            model: "speech-2.8-hd",
+            need_noise_reduction: true,
+            need_volume_normalization: true
+          })
+        });
+        const cloneText = await clone.text();
+        let cloneData = {};
+        try { cloneData = JSON.parse(cloneText); } catch {}
+        if (!clone.ok || cloneData?.base_resp?.status_code > 0) {
+          throw new Error("MiniMax voice cloning failed: " + (cloneData?.base_resp?.status_msg || cloneText.slice(0, 400)));
+        }
+
+        return json({
+          ok: true,
+          voiceId: cloneData?.voice_id || safeVoiceId,
+          voiceName,
+          provider: "MiniMax Speech 2.8",
+          note: "Voice clone created. Use it only with the voice owner's permission."
+        });
+      } catch (error) {
+        return json({ error: "Voice cloning failed.", detail: String(error?.message || error) }, 502);
+      }
+    }
+
     if (url.pathname === "/api/narrate") {
       if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
       let body;
       try { body = await request.json(); } catch { return json({ error: "Invalid JSON request." }, 400); }
-      const text = typeof body.text === "string" ? body.text.trim().slice(0, 12000) : "";
+      const text = typeof body.text === "string" ? body.text.trim().slice(0, 10000) : "";
+      const voiceId = typeof body.voiceId === "string" ? body.voiceId.trim() : "";
       const speaker = typeof body.speaker === "string" ? body.speaker : "luna";
       if (!text) return json({ error: "Narration text is required." }, 400);
-      if (!env.AI) return json({ error: "Workers AI is not configured." }, 503);
+
       try {
+        if (voiceId && env.MINIMAX_API_KEY) {
+          const tts = await fetch("https://api.minimax.io/v1/t2a_v2", {
+            method: "POST",
+            headers: {
+              "Authorization": "Bearer " + env.MINIMAX_API_KEY,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              model: "speech-2.8-hd",
+              text,
+              stream: false,
+              output_format: "hex",
+              language_boost: "auto",
+              voice_setting: { voice_id: voiceId, speed: 1, vol: 1, pitch: 0 },
+              audio_setting: { sample_rate: 32000, bitrate: 128000, format: "mp3", channel: 1 }
+            })
+          });
+          const contentType = tts.headers.get("content-type") || "";
+          if (!tts.ok) throw new Error("MiniMax TTS HTTP " + tts.status);
+          if (contentType.includes("application/json")) {
+            const data = await tts.json();
+            if (data?.base_resp?.status_code > 0) throw new Error(data.base_resp.status_msg || "MiniMax TTS failed.");
+            const hex = data?.data?.audio || data?.audio;
+            if (!hex) throw new Error("MiniMax returned no audio.");
+            return new Response(hexToBytes(hex), { headers: { "Content-Type": "audio/mpeg", "Cache-Control": "no-store" } });
+          }
+          return new Response(await tts.arrayBuffer(), { headers: { "Content-Type": contentType || "audio/mpeg", "Cache-Control": "no-store" } });
+        }
+
+        if (!env.AI) return json({ error: "No narration provider is configured." }, 503);
         const audio = await env.AI.run("@cf/deepgram/aura-2-en", { text, speaker, encoding: "mp3" });
         if (audio instanceof ReadableStream) return new Response(audio, { headers: { "Content-Type": "audio/mpeg", "Cache-Control": "no-store" } });
         return json({ ok: true, audio });
@@ -100,6 +205,7 @@ export default {
         return json({ error: "Narration failed.", detail: String(error?.message || error) }, 502);
       }
     }
+
 
     if (url.pathname === "/api/self-modify") {
       if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
@@ -502,6 +608,14 @@ function parseJsonObject(text) {
     try { return JSON.parse(cleaned.slice(start, end + 1)); } catch {}
   }
   return null;
+}
+
+function hexToBytes(hex) {
+  const clean = String(hex).replace(/^0x/i, "").trim();
+  if (!/^[0-9a-f]+$/i.test(clean) || clean.length % 2) throw new Error("Invalid audio encoding.");
+  const bytes = new Uint8Array(clean.length / 2);
+  for (let i = 0; i < clean.length; i += 2) bytes[i / 2] = parseInt(clean.slice(i, i + 2), 16);
+  return bytes;
 }
 
 function json(data, status = 200) {
