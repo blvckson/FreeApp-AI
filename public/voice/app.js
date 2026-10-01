@@ -458,18 +458,42 @@ class PocketVoice {
 
   async processVoiceClip(blob) {
     try {
+      if (!blob || !blob.size) throw new Error("The selected audio file is empty.");
+      if (blob.size > 25 * 1024 * 1024) throw new Error("Audio file is too large. Please use a clip under 25 MB.");
+
+      if (!this.isWorkerReady) {
+        this.setCloneStatus("Voice model is still loading… please wait.", "");
+        return;
+      }
+
       await this.ensureAudioContext();
-      this.setCloneStatus("Encoding voice…", "");
+      if (this.audioContext.state === "suspended") await this.audioContext.resume();
+
+      this.setCloneStatus("Reading audio…", "");
       const arrayBuffer = await blob.arrayBuffer();
-      const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
+
+      let audioBuffer;
+      try {
+        audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer.slice(0));
+      } catch (decodeError) {
+        throw new Error("This audio format could not be decoded by the browser. Try WAV, MP3, M4A or OGG.");
+      }
+
+      if (!audioBuffer || !audioBuffer.length || !Number.isFinite(audioBuffer.duration)) {
+        throw new Error("No usable audio was found in the file.");
+      }
+      if (audioBuffer.duration < 0.5) throw new Error("Please upload at least 0.5 seconds of speech.");
+
+      this.setCloneStatus("Converting voice to 24 kHz mono…", "");
 
       let pcmData;
-      if (audioBuffer.sampleRate !== SAMPLE_RATE) {
-        const offlineCtx = new OfflineAudioContext(1, Math.ceil(audioBuffer.duration * SAMPLE_RATE), SAMPLE_RATE);
+      if (audioBuffer.sampleRate !== SAMPLE_RATE || audioBuffer.numberOfChannels !== 1) {
+        const length = Math.ceil(audioBuffer.duration * SAMPLE_RATE);
+        const offlineCtx = new OfflineAudioContext(1, length, SAMPLE_RATE);
         const source = offlineCtx.createBufferSource();
         source.buffer = audioBuffer;
         source.connect(offlineCtx.destination);
-        source.start();
+        source.start(0);
         const resampled = await offlineCtx.startRendering();
         pcmData = resampled.getChannelData(0);
       } else {
@@ -477,15 +501,31 @@ class PocketVoice {
       }
 
       const maxSamples = SAMPLE_RATE * 10;
-      const clipped = pcmData.length > maxSamples ? pcmData.slice(0, maxSamples) : new Float32Array(pcmData);
+      const clipped = pcmData.length > maxSamples
+        ? pcmData.slice(0, maxSamples)
+        : new Float32Array(pcmData);
 
-      // Save for potential IndexedDB storage
+      // Remove DC offset and normalize conservatively for the voice encoder.
+      let sum = 0;
+      for (let i = 0; i < clipped.length; i++) sum += clipped[i];
+      const mean = sum / Math.max(1, clipped.length);
+      let peak = 0;
+      for (let i = 0; i < clipped.length; i++) {
+        clipped[i] -= mean;
+        peak = Math.max(peak, Math.abs(clipped[i]));
+      }
+      if (peak > 1e-5) {
+        const gain = Math.min(1.0, 0.95 / peak);
+        for (let i = 0; i < clipped.length; i++) clipped[i] *= gain;
+      }
+
       this.lastClonedPCM = new Float32Array(clipped);
-
-      this.worker.postMessage({ type: "encode_voice", data: { audio: clipped } }, [clipped.buffer]);
-      this.setCloneStatus("Preparing cloned voice…", "");
+      const workerAudio = new Float32Array(clipped);
+      this.setCloneStatus("Sending voice to the local narrator model…", "");
+      this.worker.postMessage({ type: "encode_voice", data: { audio: workerAudio } }, [workerAudio.buffer]);
     } catch (err) {
-      this.setCloneStatus(`Failed: ${err.message}`, "error");
+      console.error("Voice upload/encoding failed:", err);
+      this.setCloneStatus(`Upload failed: ${err.message || err}`, "error");
     }
   }
 
