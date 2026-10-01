@@ -237,7 +237,7 @@ async function fetchPage(item) {
 
 function extractText(html) {
   const withoutBlocks = html.replace(
-    new RegExp("<(?:script|style|noscript|svg)\\\\b[\\\\s\\\\S]*?</(?:script|style|noscript|svg)>", "gi"),
+    new RegExp("<(?:script|style|noscript|svg)\\b[\\s\\S]*?</(?:script|style|noscript|svg)>", "gi"),
     " "
   );
   return decodeHtml(withoutBlocks.replace(new RegExp("<[^>]+>", "g"), " "))
