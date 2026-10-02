@@ -14,7 +14,7 @@
           <h1>FreeApp AI</h1>
           <p>Deep reasoning, live research, screenshots, images and videos.</p>
         </div>
-        <button id="narrator-settings-button" class="icon-button" type="button" aria-label="Narrator settings">🎙 Voice Clone</button>
+        <div class="narrator-buttons"><button id="builtin-narrator-button" class="icon-button" type="button">🔊 Built-in Narrator</button><button id="narrator-settings-button" class="icon-button" type="button" aria-label="Voice clone narrator">🎙 Voice Clone Narrator</button></div>
       </div>
       </header>
     <section class="card">
@@ -38,6 +38,8 @@
       </div>
     </section>
   </main>
+
+  <div id="builtin-narrator-modal" class="modal" hidden><div class="modal-card voice-modal-card" role="dialog" aria-modal="true"><button id="builtin-narrator-close" class="modal-close" type="button">×</button><h2>Built-in Narrator</h2><p>Uses the Android device Text-to-Speech engine. This is separate from Voice Clone Narrator.</p><div class="narrator-controls"><button id="builtin-speak-button" type="button">🔊 Read Latest Answer</button><button id="builtin-stop-button" type="button">⏹ Stop</button><label><input id="builtin-auto-button" type="checkbox"> Automatically read AI answers</label></div></div></div>
 
   <div id="narrator-modal" class="modal" hidden>
     <div class="modal-card voice-modal-card" role="dialog" aria-modal="true" aria-labelledby="narrator-title">
