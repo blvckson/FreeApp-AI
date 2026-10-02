@@ -14,6 +14,17 @@ let autoNarration = false;
 
 const narratorSettingsButton = document.getElementById("narrator-settings-button");
 const narratorModal = document.getElementById("narrator-modal");
+const builtinNarratorButton = document.getElementById("builtin-narrator-button");
+const builtinNarratorModal = document.getElementById("builtin-narrator-modal");
+const builtinNarratorClose = document.getElementById("builtin-narrator-close");
+const builtinSpeakButton = document.getElementById("builtin-speak-button");
+const builtinStopButton = document.getElementById("builtin-stop-button");
+const builtinAutoButton = document.getElementById("builtin-auto-button");
+if (builtinNarratorButton) builtinNarratorButton.addEventListener("click", () => builtinNarratorModal.hidden = false);
+if (builtinNarratorClose) builtinNarratorClose.addEventListener("click", () => builtinNarratorModal.hidden = true);
+if (builtinSpeakButton) builtinSpeakButton.addEventListener("click", () => speakText(resultBox.textContent || "There is no AI answer to read yet."));
+if (builtinStopButton) builtinStopButton.addEventListener("click", stopNarrator);
+if (builtinAutoButton) builtinAutoButton.addEventListener("change", () => { autoNarration = builtinAutoButton.checked; });
 const narratorClose = document.getElementById("narrator-close");
 if (narratorSettingsButton && narratorModal) {
   narratorSettingsButton.addEventListener("click", () => { narratorModal.hidden = false; });
@@ -192,6 +203,8 @@ function isSelfModificationCommand(lower) {
   const explicitSelf = /\b(modify yourself|upgrade yourself|fix yourself|change yourself|improve yourself|add yourself|update yourself)\b/.test(lower);
   return explicitSelf || (action && target);
 }
+
+function stopNarrator() { if (window.FreeAppNativeVoice?.stop) window.FreeAppNativeVoice.stop(); if ("speechSynthesis" in window) window.speechSynthesis.cancel(); }
 
 function speakText(text) {
   // Prefer the app's native, device-local narrator when running inside the
