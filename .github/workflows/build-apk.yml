@@ -58,3 +58,5 @@ jobs:
         with:
           name: FreeApp-AI-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
+
+      # Final verified build trigger for the corrected FreeApp-AI source.
