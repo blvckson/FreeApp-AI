@@ -166,7 +166,13 @@ function parsePhoneAction(line) {
   if (/^(back|go back)$/.test(lower)) return {type:"action",value:"back"};
   if (/^(home|go home)$/.test(lower)) return {type:"action",value:"home"};
   const tap = s.match(/^(?:tap|click|press)(?:\s+text)?\s*:\s*(.+)$/i) || s.match(/^(?:tap|click|press)\s+(.+)$/i);
-  if (tap && tap[1]) return {type:"action",value:"tap",text:tap[1].replace(/^["']|["']$/g,"").trim()};
+  if (tap && tap[1]) {
+    const label = tap[1].replace(/^["']|["']$/g,"").trim();
+    if (/^(send|delete|pay|purchase|buy|transfer|install|allow|confirm|submit|grant|update now|accept)$/i.test(label)) {
+      if (!window.confirm("This may submit a request, change settings, delete data, send a message, or install an update. Review the phone screen first. Continue with this tap?")) return null;
+    }
+    return {type:"action",value:"tap",text:label};
+  }
   const type = s.match(/^(?:type|enter text|write)\s*:\s*(.*)$/i);
   if (type && type[1]) {
     const value = type[1];
