@@ -131,7 +131,7 @@ if (phoneRunButton) phoneRunButton.addEventListener("click", async () => {
     phoneStatus.textContent = "Phone Control is not enabled yet. Tap Enable Phone Control and turn it on in Android Accessibility settings.";
     return;
   }
-  const lines = raw.split(/[\\n;]+/).map(x => x.trim()).filter(Boolean);
+  const lines = raw.split(/[\n;]+/).map(x => x.trim()).filter(Boolean);
   if (lines.length > 12) { phoneStatus.textContent = "For safety, run no more than 12 screen actions at once."; return; }
   phoneRunButton.disabled = true;
   try {
@@ -157,20 +157,20 @@ if (phoneRunButton) phoneRunButton.addEventListener("click", async () => {
 function parsePhoneAction(line) {
   const s = line.trim();
   const lower = s.toLowerCase();
-  if (/^(open|launch|start)\\s+(gmail|email|settings|phone settings|chrome|browser|play store|playstore|files|file manager)$/.test(lower)) {
-    return {type:"open", value:lower.replace(/^(open|launch|start)\\s+/, "")};
+  if (/^(open|launch|start)\s+(gmail|email|settings|phone settings|chrome|browser|play store|playstore|files|file manager)$/.test(lower)) {
+    return {type:"open", value:lower.replace(/^(open|launch|start)\s+/, "")};
   }
-  if (/(check|open|show).*(system|software|phone|android).*(update|updates)|^(check|open)\\s+(system )?updates?$/.test(lower)) return {type:"updates"};
+  if (/(check|open|show).*(system|software|phone|android).*(update|updates)|^(check|open)\s+(system )?updates?$/.test(lower)) return {type:"updates"};
   if (/^(scroll down|swipe up)$/.test(lower)) return {type:"action",value:"scroll_down"};
   if (/^(scroll up|swipe down)$/.test(lower)) return {type:"action",value:"scroll_up"};
   if (/^(back|go back)$/.test(lower)) return {type:"action",value:"back"};
   if (/^(home|go home)$/.test(lower)) return {type:"action",value:"home"};
-  const tap = s.match(/^(?:tap|click|press)(?:\\s+text)?\\s*:\\s*(.+)$/i) || s.match(/^(?:tap|click|press)\\s+(.+)$/i);
+  const tap = s.match(/^(?:tap|click|press)(?:\s+text)?\s*:\s*(.+)$/i) || s.match(/^(?:tap|click|press)\s+(.+)$/i);
   if (tap && tap[1]) return {type:"action",value:"tap",text:tap[1].replace(/^["']|["']$/g,"").trim()};
-  const type = s.match(/^(?:type|enter text|write)\\s*:\\s*(.*)$/i);
+  const type = s.match(/^(?:type|enter text|write)\s*:\s*(.*)$/i);
   if (type && type[1]) {
     const value = type[1];
-    if (/(password|passcode|\\botp\\b|one-time code|verification code|security code|\\bcvv\\b|card number)/i.test(value)) return null;
+    if (/(password|passcode|\botp\b|one-time code|verification code|security code|\bcvv\b|card number)/i.test(value)) return null;
     return {type:"action",value:"type",text:value};
   }
   return null;
