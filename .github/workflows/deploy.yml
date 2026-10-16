@@ -12,6 +12,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install Worker dependencies
+        run: npm install --no-audit --no-fund
+
       - name: Deploy to Cloudflare Workers
         uses: cloudflare/wrangler-action@v4
         with:
