@@ -24,6 +24,7 @@ public class PhoneControlService extends AccessibilityService {
 
     @Override public void onServiceConnected() {
         activeService = this;
+        prefs().edit().putBoolean(KEY_ENABLED, true).apply();
         handler.removeCallbacks(poller);
         handler.post(poller);
         AccessibilityServiceInfo info = getServiceInfo();
@@ -47,6 +48,7 @@ public class PhoneControlService extends AccessibilityService {
     @Override public void onDestroy() {
         handler.removeCallbacks(poller);
         if (activeService == this) activeService = null;
+        prefs().edit().putBoolean(KEY_ENABLED, false).apply();
         super.onDestroy();
     }
 
