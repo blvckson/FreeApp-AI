@@ -43,6 +43,7 @@ public class MainActivity extends Activity {
 
         webView = new WebView(this);
         webView.addJavascriptInterface(new NativeNarrator(), "FreeAppNativeVoice");
+        webView.addJavascriptInterface(new NativePhoneControl(), "FreeAppNativePhone");
 
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
@@ -145,6 +146,71 @@ public class MainActivity extends Activity {
             }
             fileCallback.onReceiveValue(results);
             fileCallback = null;
+        }
+    }
+
+    private final class NativePhoneControl {
+        @JavascriptInterface
+        public boolean isSupported() { return android.os.Build.VERSION.SDK_INT >= 24; }
+
+        @JavascriptInterface
+        public boolean isEnabled() {
+            String enabled = android.provider.Settings.Secure.getString(getContentResolver(),
+                    android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+            return enabled != null && enabled.toLowerCase(Locale.ROOT).contains(getPackageName().toLowerCase(Locale.ROOT) + "/.phonecontrolservice");
+        }
+
+        @JavascriptInterface
+        public void openAccessibilitySettings() {
+            runOnUiThread(() -> startActivity(new Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)));
+        }
+
+        @JavascriptInterface
+        public void openApp(String app) {
+            if (app == null) return;
+            String target = app.trim().toLowerCase(Locale.ROOT);
+            String packageName;
+            if (target.equals("gmail") || target.equals("email")) packageName = "com.google.android.gm";
+            else if (target.equals("settings") || target.equals("phone settings")) packageName = "com.android.settings";
+            else if (target.equals("chrome") || target.equals("browser")) packageName = "com.android.chrome";
+            else if (target.equals("play store") || target.equals("playstore")) packageName = "com.android.vending";
+            else if (target.equals("files") || target.equals("file manager")) packageName = "com.google.android.documentsui";
+            else { runOnUiThread(() -> android.widget.Toast.makeText(MainActivity.this, "For safety, choose Gmail, Settings, Chrome, Play Store, or Files.", android.widget.Toast.LENGTH_LONG).show()); return; }
+            try {
+                Intent launch = getPackageManager().getLaunchIntentForPackage(packageName);
+                if (launch == null && target.equals("files")) launch = new Intent(Intent.ACTION_GET_CONTENT).setType("*/*");
+                if (launch == null) {
+                    runOnUiThread(() -> android.widget.Toast.makeText(MainActivity.this, "That app is not installed on this phone.", android.widget.Toast.LENGTH_LONG).show());
+                    return;
+                }
+                launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(launch);
+            } catch (Exception e) {
+                runOnUiThread(() -> android.widget.Toast.makeText(MainActivity.this, "Could not open that app.", android.widget.Toast.LENGTH_LONG).show());
+            }
+        }
+
+        @JavascriptInterface
+        public void runAction(String action, String value) {
+            if (action == null) return;
+            String a = action.trim().toLowerCase(Locale.ROOT);
+            if (!(a.equals("tap") || a.equals("type") || a.equals("scroll_down") || a.equals("scroll_up") || a.equals("back") || a.equals("home"))) return;
+            if (a.equals("type") && value != null) {
+                String v = value.toLowerCase(Locale.ROOT);
+                if (v.contains("password") || v.contains("passcode") || v.contains("otp") || v.contains("verification code") || v.contains("security code") || v.contains("cvv")) {
+                    runOnUiThread(() -> android.widget.Toast.makeText(MainActivity.this, "For your security, enter passwords and verification codes yourself.", android.widget.Toast.LENGTH_LONG).show());
+                    return;
+                }
+            }
+            PhoneControlService.queueAction(MainActivity.this, a, value);
+        }
+
+        @JavascriptInterface
+        public void openSystemUpdates() {
+            runOnUiThread(() -> {
+                try { startActivity(new Intent("android.settings.SYSTEM_UPDATE_SETTINGS")); }
+                catch (Exception ignored) { startActivity(new Intent(android.provider.Settings.ACTION_SETTINGS)); }
+            });
         }
     }
 
