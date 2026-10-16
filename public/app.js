@@ -124,6 +124,7 @@ async function runWebsiteTask() {
 
     const lines = [
       data.summary || "Website task finished.",
+      data.needsHuman ? ("Human assistance required: " + (data.verification || "verification")) : "",
       "Page: " + (data.title || "(untitled)"),
       "URL: " + (data.url || parsed.href),
       "",
@@ -135,8 +136,19 @@ async function runWebsiteTask() {
       lines.push("- Read-only inspection; no interaction was needed.");
     }
     lines.push("", "Visible page content:", data.pageText || "(No readable page text was returned.)", "", data.note || "");
-    websiteResult.textContent = lines.join("\n");
-    websiteStatus.textContent = "Website task completed. Check the page content and action log above.";
+    websiteResult.replaceChildren();
+    websiteResult.textContent = lines.filter(Boolean).join("\n");
+    if (data.screenshot) {
+      const preview = document.createElement("img");
+      preview.className = "website-screenshot";
+      preview.alt = "Screenshot of the website after FreeApp AI's task";
+      preview.src = data.screenshot;
+      websiteResult.appendChild(document.createElement("br"));
+      websiteResult.appendChild(preview);
+    }
+    websiteStatus.textContent = data.needsHuman
+      ? "Paused: the website requires human verification or login. FreeApp AI did not bypass it."
+      : "Website task finished. Check the page content, screenshot, and action log above.";
   } catch (error) {
     websiteStatus.textContent = "Website task failed.";
     websiteResult.textContent = error && error.message ? error.message : "The website task failed.";

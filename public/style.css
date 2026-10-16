@@ -60,3 +60,5 @@ button:disabled { opacity: .6; cursor: wait; }
   max-height: 55vh;
   overflow: auto;
 }
+
+.website-screenshot { display:block; width:100%; max-width:640px; height:auto; margin-top:12px; border:1px solid #ccc; border-radius:8px; }
