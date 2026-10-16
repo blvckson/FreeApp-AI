@@ -37,3 +37,26 @@ button:disabled { opacity: .6; cursor: wait; }
 .small { font-size:13px; line-height:1.45; color:#555; }
 #conversation-note { margin:10px 0 0; }
 .secondary-button { background:#666; }
+
+
+.website-card { margin-top: 18px; }
+.website-card h2 { margin-top: 0; }
+.website-card input[type="url"] {
+  width: 100%;
+  padding: 13px;
+  margin: 0 0 14px;
+  font: inherit;
+  border: 1px solid #bbb;
+  border-radius: 8px;
+}
+.website-card textarea { min-height: 100px; }
+.website-result {
+  margin-top: 12px;
+  padding: 14px;
+  background: #f4f6f8;
+  border-radius: 8px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 55vh;
+  overflow: auto;
+}
