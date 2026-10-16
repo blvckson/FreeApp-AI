@@ -131,6 +131,8 @@ public class PhoneControlService extends AccessibilityService {
                 || s.contains("security code") || s.contains("cvv") || s.contains("card number");
     }
 
+    public static boolean isConnected() { return activeService != null; }
+
     public static void queueAction(android.content.Context context, String action, String value) {
         SharedPreferences p = context.getSharedPreferences(PREFS, MODE_PRIVATE);
         if (!p.getBoolean(KEY_ENABLED, false)) return;
