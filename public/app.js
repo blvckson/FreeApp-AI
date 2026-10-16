@@ -77,7 +77,105 @@ const websiteRunButton = document.getElementById("website-run-button");
 const websiteStatus = document.getElementById("website-status");
 const websiteResult = document.getElementById("website-result");
 
+
 if (websiteRunButton) websiteRunButton.addEventListener("click", runWebsiteTask);
+
+const phoneTaskInput = document.getElementById("phone-task");
+const phoneEnableButton = document.getElementById("phone-enable-button");
+const phoneGmailButton = document.getElementById("phone-gmail-button");
+const phoneSettingsButton = document.getElementById("phone-settings-button");
+const phoneUpdatesButton = document.getElementById("phone-updates-button");
+const phoneRunButton = document.getElementById("phone-run-button");
+const phoneStopButton = document.getElementById("phone-stop-button");
+const phoneStatus = document.getElementById("phone-status");
+const nativePhone = window.FreeAppNativePhone;
+
+function phoneControlAvailable() {
+  if (!nativePhone || typeof nativePhone.openAccessibilitySettings !== "function") {
+    if (phoneStatus) phoneStatus.textContent = "Phone control requires the installed Android FreeApp AI APK. It cannot control apps from a normal browser tab.";
+    return false;
+  }
+  return true;
+}
+
+if (phoneEnableButton) phoneEnableButton.addEventListener("click", () => {
+  if (!phoneControlAvailable()) return;
+  phoneStatus.textContent = "Android Accessibility settings opened. Find FreeApp AI Phone Control and switch it on yourself; return here when finished.";
+  nativePhone.openAccessibilitySettings();
+});
+if (phoneGmailButton) phoneGmailButton.addEventListener("click", () => {
+  if (!phoneControlAvailable()) return;
+  nativePhone.openApp("gmail");
+  phoneStatus.textContent = "Requested Gmail to open. If it is not installed, install it or choose another supported app.";
+});
+if (phoneSettingsButton) phoneSettingsButton.addEventListener("click", () => {
+  if (!phoneControlAvailable()) return;
+  nativePhone.openApp("settings");
+  phoneStatus.textContent = "Requested Android Settings to open.";
+});
+if (phoneUpdatesButton) phoneUpdatesButton.addEventListener("click", () => {
+  if (!phoneControlAvailable()) return;
+  nativePhone.openSystemUpdates();
+  phoneStatus.textContent = "Opened the Android system-update screen if supported. Review and confirm any update yourself.";
+});
+if (phoneStopButton) phoneStopButton.addEventListener("click", () => {
+  if (!phoneControlAvailable()) return;
+  nativePhone.stopPendingActions();
+  phoneStatus.textContent = "Pending FreeApp AI screen actions cancelled. You can still use the phone normally.";
+});
+if (phoneRunButton) phoneRunButton.addEventListener("click", async () => {
+  if (!phoneControlAvailable()) return;
+  const raw = phoneTaskInput ? phoneTaskInput.value.trim() : "";
+  if (!raw) { phoneStatus.textContent = "Enter one or more phone actions first."; return; }
+  if (typeof nativePhone.isEnabled === "function" && !nativePhone.isEnabled()) {
+    phoneStatus.textContent = "Phone Control is not enabled yet. Tap Enable Phone Control and turn it on in Android Accessibility settings.";
+    return;
+  }
+  const lines = raw.split(/[\\n;]+/).map(x => x.trim()).filter(Boolean);
+  if (lines.length > 12) { phoneStatus.textContent = "For safety, run no more than 12 screen actions at once."; return; }
+  phoneRunButton.disabled = true;
+  try {
+    for (let i = 0; i < lines.length; i++) {
+      const action = parsePhoneAction(lines[i]);
+      if (!action) {
+        phoneStatus.textContent = "Stopped at unsupported instruction: " + lines[i] + ". Use the listed action formats.";
+        break;
+      }
+      if (action.type === "open") nativePhone.openApp(action.value);
+      else if (action.type === "updates") nativePhone.openSystemUpdates();
+      else if (action.type === "action") nativePhone.runAction(action.value, action.text || "");
+      phoneStatus.textContent = "Sent action " + (i + 1) + " of " + lines.length + ": " + lines[i] + ". Check the phone screen before continuing.";
+      if (i < lines.length - 1) await new Promise(resolve => setTimeout(resolve, 1100));
+    }
+  } catch (_) {
+    phoneStatus.textContent = "Phone action could not be sent. Check that the accessibility service is enabled.";
+  } finally {
+    phoneRunButton.disabled = false;
+  }
+});
+
+function parsePhoneAction(line) {
+  const s = line.trim();
+  const lower = s.toLowerCase();
+  if (/^(open|launch|start)\\s+(gmail|email|settings|phone settings|chrome|browser|play store|playstore|files|file manager)$/.test(lower)) {
+    return {type:"open", value:lower.replace(/^(open|launch|start)\\s+/, "")};
+  }
+  if (/(check|open|show).*(system|software|phone|android).*(update|updates)|^(check|open)\\s+(system )?updates?$/.test(lower)) return {type:"updates"};
+  if (/^(scroll down|swipe up)$/.test(lower)) return {type:"action",value:"scroll_down"};
+  if (/^(scroll up|swipe down)$/.test(lower)) return {type:"action",value:"scroll_up"};
+  if (/^(back|go back)$/.test(lower)) return {type:"action",value:"back"};
+  if (/^(home|go home)$/.test(lower)) return {type:"action",value:"home"};
+  const tap = s.match(/^(?:tap|click|press)(?:\\s+text)?\\s*:\\s*(.+)$/i) || s.match(/^(?:tap|click|press)\\s+(.+)$/i);
+  if (tap && tap[1]) return {type:"action",value:"tap",text:tap[1].replace(/^["']|["']$/g,"").trim()};
+  const type = s.match(/^(?:type|enter text|write)\\s*:\\s*(.*)$/i);
+  if (type && type[1]) {
+    const value = type[1];
+    if (/(password|passcode|\\botp\\b|one-time code|verification code|security code|\\bcvv\\b|card number)/i.test(value)) return null;
+    return {type:"action",value:"type",text:value};
+  }
+  return null;
+}
+
 
 async function runWebsiteTask() {
   const url = websiteUrlInput.value.trim();
