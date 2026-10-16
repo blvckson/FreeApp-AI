@@ -51,6 +51,24 @@
       <div id="website-status" class="status" aria-live="polite"></div>
       <div id="website-result" class="website-result" aria-live="polite"></div>
     </section>
+    <section class="card phone-control-card">
+      <h2>Phone Control (Android)</h2>
+      <p>FreeApp AI can open supported apps and perform visible screen actions after you enable its accessibility service. Enable it yourself in Android settings and keep the phone unlocked while actions run.</p>
+      <div class="controls">
+        <button id="phone-enable-button" type="button">Enable Phone Control</button>
+        <button id="phone-gmail-button" class="secondary-button" type="button">Open Gmail</button>
+        <button id="phone-settings-button" class="secondary-button" type="button">Open Settings</button>
+        <button id="phone-updates-button" class="secondary-button" type="button">Check System Updates</button>
+      </div>
+      <label for="phone-task">Phone task / screen actions</label>
+      <textarea id="phone-task" rows="4" placeholder="Examples: open Gmail&#10;tap: Search mail&#10;type: receipts from example@example.com&#10;tap: Search&#10;scroll down"></textarea>
+      <p class="small">For screen actions, enter one action per line. Supported: open Gmail/Settings/Chrome/Play Store/Files; tap: visible label; type: ordinary text into the currently focused field; scroll up/down; back; home. Actions are sent to the current screen, so watch the phone. FreeApp AI will not type passwords, one-time codes, security codes or card details. You must sign in yourself and approve sending emails, payments, deleting data, security changes, or other consequential actions. System updates still require Android's own confirmation.</p>
+      <div class="controls">
+        <button id="phone-run-button" type="button">Run Phone Actions</button>
+        <button id="phone-stop-button" class="secondary-button" type="button">Stop Pending Actions</button>
+      </div>
+      <div id="phone-status" class="status" aria-live="polite">Phone control is available only in the Android app after you enable the service.</div>
+    </section>
   </main>
 
   <div id="builtin-narrator-modal" class="modal" hidden><div class="modal-card voice-modal-card" role="dialog" aria-modal="true"><button id="builtin-narrator-close" class="modal-close" type="button">×</button><h2>Built-in Narrator</h2><p>Uses the Android device Text-to-Speech engine. This is separate from Voice Clone Narrator.</p><div class="narrator-controls"><button id="builtin-speak-button" type="button">🔊 Read Latest Answer</button><button id="builtin-stop-button" type="button">⏹ Stop</button><label><input id="builtin-auto-button" type="checkbox"> Automatically read AI answers</label></div></div></div>
