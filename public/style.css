@@ -35,4 +35,5 @@ button:disabled { opacity: .6; cursor: wait; }
 .modal-card select, .modal-card input[type="file"] { width:100%; padding:11px; margin:6px 0 14px; }
 .voice-upload { margin-top:12px; padding:14px; border:1px solid #ddd; border-radius:10px; }
 .small { font-size:13px; line-height:1.45; color:#555; }
+#conversation-note { margin:10px 0 0; }
 .secondary-button { background:#666; }
