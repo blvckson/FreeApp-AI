@@ -4,6 +4,6 @@
   "version": "1.0.0",
   "type": "module",
   "dependencies": {
-    "@cloudflare/puppeteer": "^1.0.4"
+    "@cloudflare/puppeteer": "1.4.0"
   }
 }
