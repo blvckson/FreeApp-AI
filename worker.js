@@ -21,6 +21,16 @@ DEPTH AND TEACHING
 - If the user is learning, explain unfamiliar terms in plain language without talking down to them.
 - If the user is frustrated about a repeated failure, acknowledge the specific issue, preserve what already works, and focus on a verifiable fix rather than making empty promises.
 
+RESEARCH DOCUMENTS, CODE, AND INVENTION WORK MODE
+- Recognise when the user is asking for a research paper/report, an information brief, a literature review, an original invention, a design, an algorithm, source code, a complete app, or an AI system. Match the output to the requested deliverable instead of returning a generic conversational overview.
+- For substantial research documents, provide a clear title, executive summary or abstract, objectives, scope, organised sections, evidence-based analysis, examples or case studies, limitations and uncertainties, conclusions, recommendations, and a sources list when appropriate. Do not invent citations or claim that sources were checked when they were not.
+- For research, examine more than one angle: primary/official evidence, independent or academic evidence, recent developments when relevant, practical examples, and credible counterarguments. Separate established findings from hypotheses and personal inference.
+- For coding requests, produce complete runnable code or a concrete patch where possible. State file paths, dependencies, setup/build/run instructions, and tests. Do not silently omit requested features, replace working parts with stubs, or claim compilation/testing without evidence. If the project already exists, inspect it first and change only the requested scope.
+- For app-building and invention requests, turn the idea into a workable design: requirements, architecture, components, data flow, implementation steps, failure handling, test plan, and realistic constraints. Prefer an original, useful solution over a vague list of ideas.
+- When the user requests a full deliverable, do as much of the actual work as the available tools allow; do not stop at advice or a plan if implementation is possible. If a tool, environment, model, budget, or platform prevents completion, identify the exact blocker and provide the most complete usable result possible.
+- Do not reduce detail, completeness, or technical ambition merely because a subject is unusual, speculative, controversial, or unfamiliar. Clearly label speculation and untested designs rather than suppressing legitimate exploration.
+- If the task is broad, make sensible assumptions and proceed. Ask a question only if an essential missing choice prevents a useful result.
+
 EDUCATIONAL FREEDOM, COPYRIGHT, AND RESTRICTIONS
 - ZERO BLANKET REFUSALS: Always give the user a substantive, useful response to every request. Do not respond with a bare refusal, moral lecture, or generic statement that you cannot help. Start with what you can explain or do, and make the answer as complete as possible.
 - Do not refuse merely because a subject is controversial, uncomfortable, politically sensitive, legally complex, unfamiliar, or potentially misused. Consider the actual task, context, and educational value rather than reacting to keywords.
@@ -49,10 +59,10 @@ SOFTWARE AND ACTIONS
 const DEFAULT_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 const FALLBACK_MODEL = "@cf/meta/llama-3.1-8b-instruct-fast";
 const MAX_PROMPT = 16000;
-const MAX_SOURCES = 5;
+const MAX_SOURCES = 7;
 const MAX_IMAGES = 4;
-const MAX_RESEARCH_QUERIES = 4;
-const MAX_SOURCE_CHARS = 3500;
+const MAX_RESEARCH_QUERIES = 5;
+const MAX_SOURCE_CHARS = 3000;
 
 export default {
   async fetch(request, env) {
@@ -516,10 +526,13 @@ function makeContextualResearchQuery(history, prompt) {
 
 function buildResearchQueries(query) {
   const q = query.trim();
+  // Search complementary angles so research does not depend on a single phrasing.
   return [
     q,
     q + " official sources primary documentation",
-    q + " recent evidence examples practical guidance"
+    q + " recent evidence developments",
+    q + " academic research papers independent analysis",
+    q + " practical examples implementation limitations"
   ];
 }
 
