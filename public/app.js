@@ -71,6 +71,80 @@ imageInput.addEventListener("change", () => {
 
 buildButton.addEventListener("click", askAI);
 
+const websiteUrlInput = document.getElementById("website-url");
+const websiteTaskInput = document.getElementById("website-task");
+const websiteRunButton = document.getElementById("website-run-button");
+const websiteStatus = document.getElementById("website-status");
+const websiteResult = document.getElementById("website-result");
+
+if (websiteRunButton) websiteRunButton.addEventListener("click", runWebsiteTask);
+
+async function runWebsiteTask() {
+  const url = websiteUrlInput.value.trim();
+  const task = websiteTaskInput.value.trim();
+  if (!url || !task) {
+    websiteStatus.textContent = "Enter a website address and describe the task.";
+    return;
+  }
+
+  let parsed;
+  try { parsed = new URL(url); } catch (_) {
+    websiteStatus.textContent = "Enter a valid website address beginning with https://.";
+    return;
+  }
+  if (!["http:", "https:"].includes(parsed.protocol)) {
+    websiteStatus.textContent = "Only public HTTP or HTTPS websites are supported.";
+    return;
+  }
+
+  let ownerKey = localStorage.getItem("freeapp_ai_owner_key") || "";
+  if (!ownerKey) {
+    ownerKey = window.prompt("Enter your FreeApp AI owner key to authorize website actions:");
+    if (ownerKey) localStorage.setItem("freeapp_ai_owner_key", ownerKey);
+  }
+  if (!ownerKey) {
+    websiteStatus.textContent = "Website access was not authorized.";
+    return;
+  }
+
+  websiteRunButton.disabled = true;
+  websiteStatus.textContent = "Opening the website in a temporary cloud browser...";
+  websiteResult.textContent = "";
+  try {
+    const response = await fetch(API_BASE + "/api/browser-task", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-FreeApp-Admin-Key": ownerKey
+      },
+      body: JSON.stringify({ url: parsed.href, task })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error((data.error || "Website task failed.") + (data.detail ? " " + data.detail : ""));
+
+    const lines = [
+      data.summary || "Website task finished.",
+      "Page: " + (data.title || "(untitled)"),
+      "URL: " + (data.url || parsed.href),
+      "",
+      "Actions performed:"
+    ];
+    if (Array.isArray(data.actions) && data.actions.length) {
+      for (const item of data.actions) lines.push("- " + item.action + (item.selector ? " on " + item.selector : "") + (item.result ? " — " + item.result : ""));
+    } else {
+      lines.push("- Read-only inspection; no interaction was needed.");
+    }
+    lines.push("", "Visible page content:", data.pageText || "(No readable page text was returned.)", "", data.note || "");
+    websiteResult.textContent = lines.join("\n");
+    websiteStatus.textContent = "Website task completed. Check the page content and action log above.";
+  } catch (error) {
+    websiteStatus.textContent = "Website task failed.";
+    websiteResult.textContent = error && error.message ? error.message : "The website task failed.";
+  } finally {
+    websiteRunButton.disabled = false;
+  }
+}
+
 async function askAI() {
   const prompt = promptBox.value.trim();
   if (!prompt && !selectedImages.length) {
