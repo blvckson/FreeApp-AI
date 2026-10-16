@@ -92,7 +92,7 @@ export default {
           response = await env.AI.run(env.FREEAPP_AI_MODEL || DEFAULT_MODEL, {
             messages,
             max_tokens: 4096,
-            temperature: 0.255
+            temperature: 0.25
           });
         } catch {
           response = await env.AI.run(FALLBACK_MODEL, {
