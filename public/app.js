@@ -89,6 +89,7 @@ const phoneRunButton = document.getElementById("phone-run-button");
 const phoneStopButton = document.getElementById("phone-stop-button");
 const phoneStatus = document.getElementById("phone-status");
 const nativePhone = window.FreeAppNativePhone;
+let phoneActionsCancelled = false;
 
 function phoneControlAvailable() {
   if (!nativePhone || typeof nativePhone.openAccessibilitySettings !== "function") {
@@ -120,6 +121,7 @@ if (phoneUpdatesButton) phoneUpdatesButton.addEventListener("click", () => {
 });
 if (phoneStopButton) phoneStopButton.addEventListener("click", () => {
   if (!phoneControlAvailable()) return;
+  phoneActionsCancelled = true;
   nativePhone.stopPendingActions();
   phoneStatus.textContent = "Pending FreeApp AI screen actions cancelled. You can still use the phone normally.";
 });
@@ -133,9 +135,11 @@ if (phoneRunButton) phoneRunButton.addEventListener("click", async () => {
   }
   const lines = raw.split(/[\n;]+/).map(x => x.trim()).filter(Boolean);
   if (lines.length > 12) { phoneStatus.textContent = "For safety, run no more than 12 screen actions at once."; return; }
+  phoneActionsCancelled = false;
   phoneRunButton.disabled = true;
   try {
     for (let i = 0; i < lines.length; i++) {
+      if (phoneActionsCancelled) break;
       const action = parsePhoneAction(lines[i]);
       if (!action) {
         phoneStatus.textContent = "Stopped at unsupported instruction: " + lines[i] + ". Use the listed action formats.";
