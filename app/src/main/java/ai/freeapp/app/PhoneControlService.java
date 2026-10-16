@@ -5,6 +5,8 @@ import android.accessibilityservice.AccessibilityServiceInfo;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 import java.util.ArrayDeque;
@@ -16,9 +18,14 @@ public class PhoneControlService extends AccessibilityService {
     private static final String KEY_ENABLED = "user_enabled";
     private static final String KEY_ACTION = "pending_action";
     private static final String KEY_VALUE = "pending_value";
-    private final Queue<Runnable> pending = new ArrayDeque<>();
+    private static volatile PhoneControlService activeService;
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private final Runnable poller = new Runnable() { @Override public void run() { runPendingAction(); handler.postDelayed(this, 500); } };
 
     @Override public void onServiceConnected() {
+        activeService = this;
+        handler.removeCallbacks(poller);
+        handler.post(poller);
         AccessibilityServiceInfo info = getServiceInfo();
         info.eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
                 | AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED;
@@ -36,6 +43,12 @@ public class PhoneControlService extends AccessibilityService {
     }
 
     @Override public void onInterrupt() { }
+
+    @Override public void onDestroy() {
+        handler.removeCallbacks(poller);
+        if (activeService == this) activeService = null;
+        super.onDestroy();
+    }
 
     private SharedPreferences prefs() {
         return getSharedPreferences(PREFS, MODE_PRIVATE);
@@ -121,7 +134,7 @@ public class PhoneControlService extends AccessibilityService {
         if (!p.getBoolean(KEY_ENABLED, false)) return;
         p.edit().putString(KEY_VALUE, value == null ? "" : value)
                 .putString(KEY_ACTION, action == null ? "" : action).apply();
-        Intent intent = new Intent(context, PhoneControlService.class);
-        context.startService(intent);
+        PhoneControlService service = activeService;
+        if (service != null) service.handler.post(service::runPendingAction);
     }
 }
