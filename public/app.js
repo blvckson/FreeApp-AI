@@ -165,6 +165,11 @@ function parsePhoneAction(line) {
     return {type:"open", value:lower.replace(/^(open|launch|start)\s+/, "")};
   }
   if (/(check|open|show).*(system|software|phone|android).*(update|updates)|^(check|open)\s+(system )?updates?$/.test(lower)) return {type:"updates"};
+  // Launch any installed app by its visible launcher name, not only a fixed shortlist.
+  const genericOpen = s.match(/^(?:open|launch|start)\\s+(?:app\\s*:\\s*)?(.+)$/i);
+  if (genericOpen && genericOpen[1].trim()) {
+    return {type:"open", value:genericOpen[1].trim().replace(/^["']|["']$/g,"")};
+  }
   if (/^(scroll down|swipe up)$/.test(lower)) return {type:"action",value:"scroll_down"};
   if (/^(scroll up|swipe down)$/.test(lower)) return {type:"action",value:"scroll_up"};
   if (/^(back|go back)$/.test(lower)) return {type:"action",value:"back"};

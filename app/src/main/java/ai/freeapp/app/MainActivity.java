@@ -8,6 +8,8 @@ import android.os.Bundle;
 import android.speech.tts.TextToSpeech;
 import android.webkit.JavascriptInterface;
 import java.util.Locale;
+import android.content.pm.ApplicationInfo;
+import java.util.List;
 import android.Manifest;
 import android.webkit.PermissionRequest;
 import android.webkit.ValueCallback;
@@ -175,7 +177,15 @@ public class MainActivity extends Activity {
             else if (target.equals("chrome") || target.equals("browser")) packageName = "com.android.chrome";
             else if (target.equals("play store") || target.equals("playstore")) packageName = "com.android.vending";
             else if (target.equals("files") || target.equals("file manager")) packageName = "com.google.android.documentsui";
-            else { runOnUiThread(() -> android.widget.Toast.makeText(MainActivity.this, "For safety, choose Gmail, Settings, Chrome, Play Store, or Files.", android.widget.Toast.LENGTH_LONG).show()); return; }
+            else {
+                packageName = findInstalledPackage(target);
+                if (packageName == null) {
+                    runOnUiThread(() -> android.widget.Toast.makeText(MainActivity.this,
+                            "No unique installed app matched \"" + app + "\". Use its exact app name.",
+                            android.widget.Toast.LENGTH_LONG).show());
+                    return;
+                }
+            }
             try {
                 Intent launch = getPackageManager().getLaunchIntentForPackage(packageName);
                 if (launch == null && target.equals("files")) launch = new Intent(Intent.ACTION_GET_CONTENT).setType("*/*");
@@ -188,6 +198,26 @@ public class MainActivity extends Activity {
             } catch (Exception e) {
                 runOnUiThread(() -> android.widget.Toast.makeText(MainActivity.this, "Could not open that app.", android.widget.Toast.LENGTH_LONG).show());
             }
+        }
+
+        private String findInstalledPackage(String target) {
+            if (target == null || target.trim().isEmpty()) return null;
+            String wanted = target.trim().toLowerCase(Locale.ROOT);
+            List<ApplicationInfo> apps = getPackageManager().getInstalledApplications(0);
+            String partialMatch = null;
+            for (ApplicationInfo info : apps) {
+                CharSequence label;
+                try { label = getPackageManager().getApplicationLabel(info); }
+                catch (Exception ignored) { continue; }
+                if (label == null) continue;
+                String name = label.toString().trim().toLowerCase(Locale.ROOT);
+                if (name.equals(wanted)) return info.packageName;
+                if (name.contains(wanted) || wanted.contains(name)) {
+                    if (partialMatch != null && !partialMatch.equals(info.packageName)) return null;
+                    partialMatch = info.packageName;
+                }
+            }
+            return partialMatch;
         }
 
         @JavascriptInterface
