@@ -8,9 +8,27 @@ const statusBox = document.getElementById("status");
 const sourcesBox = document.getElementById("sources");
 const sourceList = document.getElementById("source-list");
 const buildButton = document.getElementById("build-button");
+const clearConversationButton = document.getElementById("clear-conversation-button");
+const conversationNote = document.getElementById("conversation-note");
+const HISTORY_KEY = "freeapp_ai_conversation_v1";
 
 let selectedImages = [];
 let autoNarration = false;
+let conversationHistory = loadConversationHistory();
+
+if (clearConversationButton) {
+  clearConversationButton.addEventListener("click", () => {
+    conversationHistory = [];
+    try { localStorage.removeItem(HISTORY_KEY); } catch (_) {}
+    if (conversationNote) conversationNote.textContent = "Conversation context cleared. Your next question starts fresh.";
+    statusBox.textContent = "New conversation started.";
+  });
+}
+if (conversationNote) {
+  conversationNote.textContent = conversationHistory.length
+    ? "Continuing with " + Math.ceil(conversationHistory.length / 2) + " recent conversation message(s). Context is stored on this device."
+    : "Ask follow-up questions without repeating the whole topic. Context is stored on this device.";
+}
 
 const narratorSettingsButton = document.getElementById("narrator-settings-button");
 const narratorModal = document.getElementById("narrator-modal");
@@ -118,7 +136,7 @@ async function askAI() {
     const response = await fetch(API_BASE + "/api/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt, images })
+      body: JSON.stringify({ prompt, images, history: conversationHistory.slice(-12) })
     });
 
     const data = await response.json().catch(() => ({}));
@@ -129,6 +147,18 @@ async function askAI() {
 
     const answer = data.result || "No response was returned.";
     resultBox.textContent = answer;
+
+    if (prompt) {
+      conversationHistory.push({ role: "user", content: prompt });
+      conversationHistory.push({ role: "assistant", content: answer });
+      conversationHistory = conversationHistory.slice(-16).map(message => ({
+        role: message.role,
+        content: String(message.content || "").slice(0, 5000)
+      }));
+      saveConversationHistory();
+      if (conversationNote) conversationNote.textContent =
+        "Conversation context saved on this device (" + Math.ceil(conversationHistory.length / 2) + " recent message(s)). Clear it any time.";
+    }
 
     renderMedia(data.media);
     renderSources(data.sources);
@@ -198,10 +228,28 @@ function renderMedia(media) {
 }
 
 function isSelfModificationCommand(lower) {
-  const action = /\b(add|change|modify|update|upgrade|improve|fix|repair|remove|delete|replace|rewrite|redesign|build|create|implement|enable|disable)\b/.test(lower);
-  const target = /\b(app|application|project|code|source|feature|functionality|interface|ui|button|screen|narrator|voice|voice clone|self|freeapp|freeapp ai)\b/.test(lower);
+  const action = /\b(make|add|change|modify|update|upgrade|improve|fix|repair|remove|delete|replace|rewrite|redesign|build|create|implement|enable|disable)\b/.test(lower);
+  const target = /\b(app|application|project|code|source|feature|functionality|interface|ui|button|screen|narrator|voice|voice clone|self|freeapp|freeapp ai|personality|emotional intelligence|emotions|consciousness|memory|topic continuity|conversation history|reasoning|answer depth|detailed answers)\b/.test(lower);
   const explicitSelf = /\b(modify yourself|upgrade yourself|fix yourself|change yourself|improve yourself|add yourself|update yourself)\b/.test(lower);
   return explicitSelf || (action && target);
+}
+
+function loadConversationHistory() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
+    if (!Array.isArray(saved)) return [];
+    return saved.slice(-16).filter(item =>
+      item && ["user", "assistant"].includes(item.role) && typeof item.content === "string"
+    ).map(item => ({ role: item.role, content: item.content.slice(0, 5000) }));
+  } catch (_) {
+    return [];
+  }
+}
+
+function saveConversationHistory() {
+  try { localStorage.setItem(HISTORY_KEY, JSON.stringify(conversationHistory)); } catch (_) {
+    if (conversationNote) conversationNote.textContent = "This device could not save conversation context. Follow-ups may need a reminder of earlier details.";
+  }
 }
 
 function stopNarrator() { if (window.FreeAppNativeVoice?.stop) window.FreeAppNativeVoice.stop(); if ("speechSynthesis" in window) window.speechSynthesis.cancel(); }
