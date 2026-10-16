@@ -157,7 +157,7 @@ public class MainActivity extends Activity {
         public boolean isEnabled() {
             String enabled = android.provider.Settings.Secure.getString(getContentResolver(),
                     android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
-            return enabled != null && enabled.toLowerCase(Locale.ROOT).contains(getPackageName().toLowerCase(Locale.ROOT) + "/.phonecontrolservice");
+            return enabled != null && enabled.toLowerCase(Locale.ROOT).contains(getPackageName().toLowerCase(Locale.ROOT)) && enabled.toLowerCase(Locale.ROOT).contains("phonecontrolservice");
         }
 
         @JavascriptInterface
@@ -203,6 +203,11 @@ public class MainActivity extends Activity {
                 }
             }
             PhoneControlService.queueAction(MainActivity.this, a, value);
+        }
+
+        @JavascriptInterface
+        public void stopPendingActions() {
+            getSharedPreferences("freeapp_phone_control", MODE_PRIVATE).edit().remove("pending_action").remove("pending_value").apply();
         }
 
         @JavascriptInterface
