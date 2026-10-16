@@ -166,7 +166,7 @@ function parsePhoneAction(line) {
   }
   if (/(check|open|show).*(system|software|phone|android).*(update|updates)|^(check|open)\s+(system )?updates?$/.test(lower)) return {type:"updates"};
   // Launch any installed app by its visible launcher name, not only a fixed shortlist.
-  const genericOpen = s.match(/^(?:open|launch|start)\\s+(?:app\\s*:\\s*)?(.+)$/i);
+  const genericOpen = s.match(/^(?:open|launch|start)\s+(?:app\s*:\s*)?(.+)$/i);
   if (genericOpen && genericOpen[1].trim()) {
     return {type:"open", value:genericOpen[1].trim().replace(/^["']|["']$/g,"")};
   }
@@ -177,7 +177,7 @@ function parsePhoneAction(line) {
   const tap = s.match(/^(?:tap|click|press)(?:\s+text)?\s*:\s*(.+)$/i) || s.match(/^(?:tap|click|press)\s+(.+)$/i);
   if (tap && tap[1]) {
     const label = tap[1].replace(/^["']|["']$/g,"").trim();
-    if (/^(send|delete|pay|purchase|buy|transfer|install|allow|confirm|submit|grant|update now|accept)$/i.test(label)) {
+    if (/^(?:send(?:\s+.+)?|delete(?:\s+.+)?|pay(?:\s+.+)?|purchase(?:\s+.+)?|buy(?:\s+.+)?|transfer(?:\s+.+)?|install(?:\s+.+)?|allow(?:\s+.+)?|confirm(?:\s+.+)?|submit(?:\s+.+)?|grant(?:\s+.+)?|update now|accept(?:\s+.+)?)$/i.test(label)) {
       if (!window.confirm("This may submit a request, change settings, delete data, send a message, or install an update. Review the phone screen first. Continue with this tap?")) return null;
     }
     return {type:"action",value:"tap",text:label};
