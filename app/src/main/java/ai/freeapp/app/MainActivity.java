@@ -191,6 +191,12 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public void stopPendingActions() {
+            getSharedPreferences("freeapp_phone_control", MODE_PRIVATE).edit()
+                    .remove("pending_action").remove("pending_value").apply();
+        }
+
+        @JavascriptInterface
         public void runAction(String action, String value) {
             if (action == null) return;
             String a = action.trim().toLowerCase(Locale.ROOT);
