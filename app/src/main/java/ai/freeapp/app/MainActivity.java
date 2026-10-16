@@ -212,11 +212,6 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
-        public void stopPendingActions() {
-            getSharedPreferences("freeapp_phone_control", MODE_PRIVATE).edit().remove("pending_action").remove("pending_value").apply();
-        }
-
-        @JavascriptInterface
         public void openSystemUpdates() {
             runOnUiThread(() -> {
                 try { startActivity(new Intent("android.settings.SYSTEM_UPDATE_SETTINGS")); }
