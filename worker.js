@@ -580,15 +580,26 @@ async function analyzeImages(env, images, prompt) {
     content.push({ type: "image_url", image_url: { url: dataUrl } });
   }
 
-  try {
-    const r = await runChatModel(env, [{ role: "user", content }], {
-      max_tokens: 4096,
-      temperature: 0.1
-    });
-    return "IMAGE ANALYSIS:\n" + (r?.response || "No image analysis was returned.");
-  } catch {
-    return "IMAGE INPUT: Image was attached, but detailed image analysis was unavailable from the configured providers.";
+  const settings = { messages: [{ role: "user", content }], max_tokens: 4096, temperature: 0.1 };
+  // Preserve the original Cloudflare vision-model order before using Gemini.
+  if (env.AI) {
+    try {
+      const r = await env.AI.run("@cf/meta/llama-4-scout-17b-16e-instruct", settings);
+      if (r?.response) return "IMAGE ANALYSIS:\n" + r.response;
+    } catch {}
+    try {
+      const r = await env.AI.run("@cf/llava-hf/llava-1.5-7b-hf", settings);
+      if (r?.response) return "IMAGE ANALYSIS:\n" + r.response;
+    } catch {}
   }
+
+  if (env.GEMINI_API_KEY) {
+    try {
+      const r = await runGeminiChatModel(env, settings.messages, settings);
+      return "IMAGE ANALYSIS:\n" + (r?.response || "No image analysis was returned.");
+    } catch {}
+  }
+  return "IMAGE INPUT: Image was attached, but detailed image analysis was unavailable from the configured providers.";
 }
 
 function buildMedia(prompt, sources) {
