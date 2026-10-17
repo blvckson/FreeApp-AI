@@ -6,6 +6,9 @@ import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Bundle;
 import android.speech.tts.TextToSpeech;
+import android.speech.tts.UtteranceProgressListener;
+import org.json.JSONObject;
+import java.util.ArrayList;
 import android.webkit.JavascriptInterface;
 import java.util.Locale;
 import android.content.pm.ApplicationInfo;
@@ -28,18 +31,60 @@ public class MainActivity extends Activity {
     private WebView webView;
     private ValueCallback<Uri[]> fileCallback;
     private TextToSpeech textToSpeech;
+    private volatile boolean ttsReady = false;
+    private String pendingNarration = null;
+    private int narrationBatch = 0;
+    private volatile String lastUtteranceId = null;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
         textToSpeech = new TextToSpeech(this, status -> {
-            if (status == TextToSpeech.SUCCESS) {
-                int result = textToSpeech.setLanguage(Locale.US);
-                if (result == TextToSpeech.LANG_MISSING_DATA ||
-                        result == TextToSpeech.LANG_NOT_SUPPORTED) {
-                    textToSpeech.setLanguage(Locale.UK);
+            if (status != TextToSpeech.SUCCESS || textToSpeech == null) {
+                ttsReady = false;
+                notifyNarratorStatus("Text-to-Speech could not initialize. Check the Android TTS engine and language data.");
+                return;
+            }
+
+            int languageResult = textToSpeech.setLanguage(Locale.US);
+            if (languageResult == TextToSpeech.LANG_MISSING_DATA ||
+                    languageResult == TextToSpeech.LANG_NOT_SUPPORTED) {
+                languageResult = textToSpeech.setLanguage(Locale.UK);
+            }
+            if (languageResult == TextToSpeech.LANG_MISSING_DATA ||
+                    languageResult == TextToSpeech.LANG_NOT_SUPPORTED) {
+                languageResult = textToSpeech.setLanguage(Locale.getDefault());
+            }
+            ttsReady = languageResult != TextToSpeech.LANG_MISSING_DATA
+                    && languageResult != TextToSpeech.LANG_NOT_SUPPORTED;
+
+            textToSpeech.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+                @Override public void onStart(String utteranceId) {
+                    notifyNarratorStatus("Reading the answer aloud. Tap Stop to cancel.");
                 }
+                @Override public void onDone(String utteranceId) {
+                    if (utteranceId != null && utteranceId.equals(lastUtteranceId)) {
+                        notifyNarratorStatus("Finished reading the answer.");
+                    }
+                }
+                @Override public void onError(String utteranceId) {
+                    notifyNarratorStatus("Narration failed during playback. Tap Read Latest Answer to try again.");
+                }
+                @Override public void onError(String utteranceId, int errorCode) {
+                    onError(utteranceId);
+                }
+            });
+
+            if (!ttsReady) {
+                notifyNarratorStatus("No supported TTS language is ready. Install or enable English voice data in Android Text-to-Speech settings.");
+                return;
+            }
+            notifyNarratorStatus("Narrator ready.");
+            if (pendingNarration != null && !pendingNarration.trim().isEmpty()) {
+                String queued = pendingNarration;
+                pendingNarration = null;
+                speakNarration(queued);
             }
         });
 
@@ -253,20 +298,72 @@ public class MainActivity extends Activity {
     private final class NativeNarrator {
         @JavascriptInterface
         public void speak(String text) {
-            if (textToSpeech == null || text == null || text.trim().isEmpty()) return;
+            if (text == null || text.trim().isEmpty()) {
+                notifyNarratorStatus("There is no answer text to read yet.");
+                return;
+            }
+            String safeText = text.trim();
             runOnUiThread(() -> {
-                textToSpeech.setSpeechRate(1.0f);
-                textToSpeech.setPitch(0.98f);
-                textToSpeech.speak(text, TextToSpeech.QUEUE_FLUSH, null, "freeapp-narrator");
+                if (textToSpeech == null || !ttsReady) {
+                    pendingNarration = safeText;
+                    notifyNarratorStatus("Preparing the device narrator. Playback will begin when TTS is ready.");
+                    return;
+                }
+                speakNarration(safeText);
             });
         }
 
         @JavascriptInterface
         public void stop() {
-            if (textToSpeech != null) {
-                runOnUiThread(() -> textToSpeech.stop());
+            runOnUiThread(() -> {
+                pendingNarration = null;
+                lastUtteranceId = null;
+                if (textToSpeech != null) textToSpeech.stop();
+                notifyNarratorStatus("Narration stopped.");
+            });
+        }
+    }
+
+    private void speakNarration(String input) {
+        if (textToSpeech == null || !ttsReady || input == null || input.trim().isEmpty()) {
+            notifyNarratorStatus("Narrator is not ready. Check Android Text-to-Speech settings and try again.");
+            return;
+        }
+        String normalized = input.replaceAll("\\s+", " ").trim();
+        final int maxChunk = Math.min(2800, TextToSpeech.getMaxSpeechInputLength() - 100);
+        ArrayList<String> chunks = new ArrayList<>();
+        while (normalized.length() > maxChunk) {
+            int cut = normalized.lastIndexOf(' ', maxChunk);
+            if (cut < maxChunk / 2) cut = maxChunk;
+            chunks.add(normalized.substring(0, cut).trim());
+            normalized = normalized.substring(cut).trim();
+        }
+        if (!normalized.isEmpty()) chunks.add(normalized);
+        if (chunks.isEmpty()) return;
+
+        narrationBatch++;
+        int batch = narrationBatch;
+        lastUtteranceId = "freeapp-narrator-" + batch + "-" + (chunks.size() - 1);
+        textToSpeech.setSpeechRate(1.0f);
+        textToSpeech.setPitch(0.98f);
+        for (int i = 0; i < chunks.size(); i++) {
+            String id = "freeapp-narrator-" + batch + "-" + i;
+            int queueMode = i == 0 ? TextToSpeech.QUEUE_FLUSH : TextToSpeech.QUEUE_ADD;
+            int result = textToSpeech.speak(chunks.get(i), queueMode, null, id);
+            if (result == TextToSpeech.ERROR) {
+                notifyNarratorStatus("Android TTS rejected part of the answer. Try again or check installed voice data.");
+                return;
             }
         }
+        notifyNarratorStatus("Reading the answer aloud. Tap Stop to cancel.");
+    }
+
+    private void notifyNarratorStatus(String message) {
+        runOnUiThread(() -> {
+            if (webView == null) return;
+            String quoted = JSONObject.quote(message == null ? "" : message);
+            webView.evaluateJavascript("window.FreeAppNarratorStatus && window.FreeAppNarratorStatus(" + quoted + ");", null);
+        });
     }
 
     @Override
