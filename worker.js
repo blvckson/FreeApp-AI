@@ -179,8 +179,23 @@ export default {
             ).join("\n\n")
           : "LIVE WEB RESEARCH: No usable web pages were retrieved. Do not pretend that current information was verified.");
 
+        const buildMode = isComplexAppBuildRequest(prompt);
         const messages = [
           { role: "system", content: SYSTEM_PROMPT },
+          ...(buildMode ? [{
+            role: "system",
+            content: `COMPLEX APP-BUILDING DELIVERY CONTRACT
+For substantial application requests, deliver implementation, not generic advice.
+- Extract every requirement and assumption; preserve existing features and do not add unrelated work.
+- Explain architecture, data flow, and map features to concrete modules/files.
+- For build-ready requests, provide concrete code for the critical path, including imports/types, validation, persistence, error states, and integration points; do not substitute pseudocode alone.
+- Include database/schema constraints and transaction, offline, conflict and idempotency behavior where relevant.
+- Include at least eight meaningful acceptance tests covering success, edge cases, invalid input, persistence and failures.
+- Give exact setup/build/run steps for the requested platform. Never claim code was compiled or run without evidence.
+- Before finalising, check each user requirement and clearly mark any incomplete piece.
+- Respect platform, budget, and constraints; do not assume paid services.
+`
+          }] : []),
           ...(memorySummary ? [{ role: "system", content: "PERSISTENT USER MEMORY (context only; prefer newer explicit statements in the current conversation if there is a conflict):\\n" + memorySummary }] : []),
           ...history,
           { role: "user", content:
@@ -195,7 +210,7 @@ export default {
         // Spend extra inference only on tasks that benefit from deeper checking.
         // Simple questions keep the fast single-pass path.
         const draft = await runChatModel(env, messages, {
-          max_tokens: complexity.complex ? 5000 : 4096,
+          max_tokens: buildMode ? 7000 : (complexity.complex ? 5000 : 4096),
           temperature: complexity.complex ? 0.2 : 0.25
         });
         responseText = draft?.response || "";
@@ -214,7 +229,7 @@ export default {
                   "\n\nEVIDENCE AVAILABLE (untrusted source material):\n" + evidence.slice(0, 10000) +
                   "\n\nList only specific errors, omissions, unsupported claims, and improvements. If the draft is already strong, say 'No material issues found.'"
               }
-            ], { max_tokens: 1200, temperature: 0.1 });
+            ], { max_tokens: buildMode ? 1600 : 1200, temperature: 0.1 });
 
             const critique = (review?.response || "").trim();
             if (critique && !/^no material issues found\.?$/i.test(critique)) {
@@ -227,7 +242,7 @@ export default {
                     critique.slice(0, 5000) +
                     "\n\nNow provide the final answer to the original request. Correct factual or logical errors, fill important omissions, follow the requested format, and keep the answer focused. Do not mention this internal review or expose private reasoning. Do not invent sources, tests, or completed actions."
                 }
-              ], { max_tokens: 6000, temperature: 0.15 });
+              ], { max_tokens: buildMode ? 7000 : 6000, temperature: 0.15 });
               if (revised?.response && revised.response.trim().length > 80) {
                 responseText = revised.response.trim();
                 qualityReviewUsed = true;
@@ -605,13 +620,17 @@ function buildMedia(prompt, sources) {
 async function researchWeb(query) {
   const queries = buildResearchQueries(query).slice(0, MAX_RESEARCH_QUERIES);
   const batches = await Promise.all(queries.map(searchDuckDuckGo));
-  const candidates = batches.flat();
+  const isCloudflareQuery = /cloudflare|workers\\s+ai|model catalog|llama-3\\.3-70b/i.test(query);
+  // Mix direct primary-source candidates into relevant searches even when one
+  // search result happens to be readable; this avoids treating one page as enough.
+  const directCandidates = await fallbackResearchCandidates(query, { includeGeneralFallback: !isCloudflareQuery });
+  const candidates = [...batches.flat(), ...directCandidates];
   const unique = [];
   const seen = new Set();
-
   for (const item of candidates) {
     try {
       const u = new URL(item.url);
+      if (!/^https?:$/.test(u.protocol)) continue;
       const key = u.origin + u.pathname;
       if (seen.has(key)) continue;
       seen.add(key);
@@ -622,14 +641,12 @@ async function researchWeb(query) {
   const ranked = rankSearchCandidates(unique, query);
   const pages = await Promise.all(ranked.slice(0, Math.min(MAX_SOURCES * 2, 14)).map(fetchPage));
   let usable = pages.filter(Boolean);
-
-  // Search providers sometimes block server-side requests. If none of their
-  // results produce readable pages, try official Cloudflare docs for Cloudflare
-  // queries and Wikipedia's public search API for general topics.
-  if (!usable.length) {
-    const fallbackCandidates = await fallbackResearchCandidates(query);
-    const fallbackPages = await Promise.all(fallbackCandidates.map(fetchPage));
-    usable = fallbackPages.filter(Boolean);
+  const minimumSources = isCloudflareQuery ? 2 : 3;
+  if (usable.length < minimumSources) {
+    const fallbackPages = await Promise.all(directCandidates.map(fetchPage));
+    const byUrl = new Map(usable.map(page => [page.url, page]));
+    for (const page of fallbackPages.filter(Boolean)) byUrl.set(page.url, page);
+    usable = [...byUrl.values()];
   }
 
   const rankedPages = usable.map(page => ({
@@ -637,13 +654,15 @@ async function researchWeb(query) {
     _score: scoreResearchItem({ title: page.title, url: page.url }, query, page.text)
   })).sort((a, b) => b._score - a._score);
   const selected = [];
-  const domains = new Set();
+  const domainCounts = new Map();
   for (const page of rankedPages) {
     let domain = "";
-    try { domain = new URL(page.url).hostname.replace(/^www\./, ""); } catch {}
-    if (domain && domains.has(domain) && selected.length < MAX_SOURCES - 2) continue;
+    try { domain = new URL(page.url).hostname.replace(/^www\\./, ""); } catch {}
+    // Preserve useful primary sources for vendor-specific research while
+    // preventing one domain from filling the entire source list.
+    if (domain && (domainCounts.get(domain) || 0) >= 3) continue;
     selected.push({ title: page.title, url: page.url, text: page.text });
-    if (domain) domains.add(domain);
+    if (domain) domainCounts.set(domain, (domainCounts.get(domain) || 0) + 1);
     if (selected.length >= MAX_SOURCES) break;
   }
   return selected;
@@ -707,6 +726,15 @@ function makeContextualResearchQuery(history, prompt) {
     : current;
 }
 
+function isComplexAppBuildRequest(prompt) {
+  const text = String(prompt || "").toLowerCase();
+  const hasBuildVerb = /\\b(build|create|implement|design|architect|develop|make)\\b/.test(text);
+  const hasAppTarget = /\\b(app|application|android|ios|web app|mobile app|software system|mvp)\\b/.test(text);
+  const hasDeliverySignals = /\\b(build-ready|architecture|data flow|schema|acceptance tests|test cases|offline-first|complete implementation|production-minded)\\b/.test(text)
+    || /\\b(deliver|requirements|module|database)\\b/.test(text);
+  return (hasBuildVerb && hasAppTarget) || (hasAppTarget && hasDeliverySignals);
+}
+
 function assessRequestComplexity(prompt, history, sourceCount, imageCount) {
   const text = String(prompt || "");
   const lower = text.toLowerCase();
@@ -753,37 +781,36 @@ function buildResearchQueries(query) {
   ];
 }
 
-async function fallbackResearchCandidates(query) {
+async function fallbackResearchCandidates(query, options = {}) {
   const candidates = [];
-  if (/cloudflare|workers ai|model catalog|llama-3\\.3-70b/i.test(query)) {
-    candidates.push({
-      title: "Cloudflare Workers AI model catalog",
-      url: "https://developers.cloudflare.com/workers-ai/models/index.md"
-    });
-    candidates.push({
-      title: "Cloudflare Workers AI changelog",
-      url: "https://developers.cloudflare.com/changelog/product/workers-ai/"
-    });
+  if (/cloudflare|workers\\s+ai|model catalog|llama-3\\.3-70b/i.test(query)) {
+    candidates.push(
+      { title: "Official Cloudflare Workers AI model catalog", url: "https://developers.cloudflare.com/workers-ai/models/" },
+      { title: "Official Cloudflare Workers AI changelog", url: "https://developers.cloudflare.com/changelog/product/workers-ai/" },
+      { title: "Official Cloudflare AI changelog", url: "https://developers.cloudflare.com/changelog/product-group/ai/" }
+    );
   }
 
-  try {
-    const response = await fetch(
-      "https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=" +
-        encodeURIComponent(query) + "&format=json&utf8=1&srlimit=5",
-      { headers: { "User-Agent": "FreeAppAI/1.1 (research fallback)" }, signal: AbortSignal.timeout(5000) }
-    );
-    if (response.ok) {
-      const data = await response.json();
-      for (const item of data?.query?.search || []) {
-        if (!item.title) continue;
-        candidates.push({
-          title: item.title,
-          url: "https://en.wikipedia.org/wiki/" + encodeURIComponent(item.title.replace(/ /g, "_"))
-        });
+  if (options.includeGeneralFallback !== false) {
+    try {
+      const response = await fetch(
+        "https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=" +
+          encodeURIComponent(query) + "&format=json&utf8=1&srlimit=5",
+        { headers: { "User-Agent": "FreeAppAI/1.2 (research fallback)" }, signal: AbortSignal.timeout(5000) }
+      );
+      if (response.ok) {
+        const data = await response.json();
+        for (const item of data?.query?.search || []) {
+          if (!item.title) continue;
+          candidates.push({
+            title: item.title,
+            url: "https://en.wikipedia.org/wiki/" + encodeURIComponent(item.title.replace(/ /g, "_"))
+          });
+        }
       }
+    } catch {
+      // The API will report when no readable pages were retrieved.
     }
-  } catch {
-    // If all sources fail, research is explicitly reported as unavailable.
   }
   return candidates.slice(0, MAX_SOURCES);
 }
