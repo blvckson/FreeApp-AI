@@ -642,7 +642,7 @@ async function researchWeb(query) {
   const pages = await Promise.all(ranked.slice(0, Math.min(MAX_SOURCES * 2, 14)).map(fetchPage));
   let usable = pages.filter(Boolean);
   const minimumSources = isCloudflareQuery ? 2 : 3;
-  if (usable.length < minimumSources) {
+  if (isCloudflareQuery || usable.length < minimumSources) {
     const fallbackPages = await Promise.all(directCandidates.map(fetchPage));
     const byUrl = new Map(usable.map(page => [page.url, page]));
     for (const page of fallbackPages.filter(Boolean)) byUrl.set(page.url, page);
