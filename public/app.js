@@ -50,6 +50,7 @@ const functionMenuContent = document.getElementById("function-menu-content");
 const menuToggle = document.getElementById("menu-toggle");
 const menuClose = document.getElementById("menu-close");
 const narratorStatus = document.getElementById("narrator-status");
+window.FreeAppNarratorStatus = function(message) { if (narratorStatus) narratorStatus.textContent = String(message || ""); };
 
 if (functionMenu && functionMenuContent) {
   const moveIntoMenu = (element) => { if (element) functionMenuContent.appendChild(element); };
