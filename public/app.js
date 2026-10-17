@@ -11,6 +11,9 @@ const buildButton = document.getElementById("build-button");
 const clearConversationButton = document.getElementById("clear-conversation-button");
 const conversationNote = document.getElementById("conversation-note");
 const HISTORY_KEY = "freeapp_ai_conversation_v1";
+const MEMORY_KEY = "freeapp_ai_memory_summary_v1";
+const MEMORY_TURN_COUNT_KEY = "freeapp_ai_memory_turn_count_v1";
+let persistentMemory = loadPersistentMemory();
 
 let selectedImages = [];
 let autoNarration = false;
@@ -27,7 +30,7 @@ if (clearConversationButton) {
 if (conversationNote) {
   conversationNote.textContent = conversationHistory.length
     ? "Continuing with " + Math.ceil(conversationHistory.length / 2) + " recent conversation message(s). Context is stored on this device."
-    : "Ask follow-up questions without repeating the whole topic. Context is stored on this device.";
+    : "Ask follow-up questions without repeating the whole topic. Conversation context and a concise memory summary can be stored on this device.";
 }
 
 const narratorSettingsButton = document.getElementById("narrator-settings-button");
@@ -335,7 +338,7 @@ async function askAI() {
     const response = await fetch(API_BASE + "/api/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt, images, history: conversationHistory.slice(-12) })
+      body: JSON.stringify({ prompt, images, history: conversationHistory.slice(-12), memorySummary: persistentMemory })
     });
 
     const data = await response.json().catch(() => ({}));
@@ -356,7 +359,8 @@ async function askAI() {
       }));
       saveConversationHistory();
       if (conversationNote) conversationNote.textContent =
-        "Conversation context saved on this device (" + Math.ceil(conversationHistory.length / 2) + " recent message(s)). Clear it any time.";
+        "Recent conversation context is saved on this device. A separate concise memory summary preserves useful project details and preferences; clear both any time.";
+      updatePersistentMemory(prompt);
     }
 
     renderMedia(data.media);
@@ -431,6 +435,40 @@ function isSelfModificationCommand(lower) {
   const target = /\b(app|application|project|code|source|feature|functionality|interface|ui|button|screen|narrator|voice|voice clone|self|freeapp|freeapp ai|personality|emotional intelligence|emotions|consciousness|memory|topic continuity|conversation history|reasoning|answer depth|detailed answers)\b/.test(lower);
   const explicitSelf = /\b(modify yourself|upgrade yourself|fix yourself|change yourself|improve yourself|add yourself|update yourself)\b/.test(lower);
   return explicitSelf || (action && target);
+}
+
+function loadPersistentMemory() {
+  try { return String(localStorage.getItem(MEMORY_KEY) || "").slice(0, 3500); }
+  catch (_) { return ""; }
+}
+
+async function updatePersistentMemory(prompt) {
+  let turnCount = 0;
+  try {
+    turnCount = Number(localStorage.getItem(MEMORY_TURN_COUNT_KEY) || "0") + 1;
+    localStorage.setItem(MEMORY_TURN_COUNT_KEY, String(turnCount));
+  } catch (_) {}
+  const explicit = /\\b(remember|save this|keep in mind|don't forget|do not forget|store this)\\b/i.test(prompt || "");
+  if (!explicit && turnCount % 4 !== 0) return;
+  try {
+    const response = await fetch(API_BASE + "/api/memory-summary", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        history: conversationHistory.slice(-16),
+        previousSummary: persistentMemory
+      })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (response.ok && data.updated && typeof data.summary === "string" && data.summary.trim()) {
+      persistentMemory = data.summary.trim().slice(0, 3500);
+      try { localStorage.setItem(MEMORY_KEY, persistentMemory); } catch (_) {}
+      if (conversationNote) conversationNote.textContent =
+        "Conversation context and useful project/preferences memory are saved on this device. Clear both any time.";
+    }
+  } catch (_) {
+    // Memory is an enhancement, not a dependency: chat continues if summarisation is unavailable.
+  }
 }
 
 function loadConversationHistory() {
