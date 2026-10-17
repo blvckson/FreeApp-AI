@@ -94,6 +94,31 @@ export default {
       return new Response(null, { status: 204, headers: corsHeaders() });
     }
 
+    if (url.pathname === "/api/phone-plan") {
+      if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
+      if (!env.AI) return json({ error: "Cloudflare Workers AI binding 'AI' is not configured." }, 503);
+      let body;
+      try { body = await request.json(); } catch { return json({ error: "Invalid JSON request." }, 400); }
+      const task = typeof body.task === "string" ? body.task.trim() : "";
+      if (!task) return json({ error: "Describe the phone task first." }, 400);
+      if (task.length > 4000) return json({ error: "Phone task is too long (maximum 4000 characters)." }, 400);
+      try {
+        const planned = await runChatModel(env, [
+          {
+            role: "system",
+            content: "Convert a user's ordinary phone task into a transparent, reviewable sequence for an Android accessibility helper. Return ONLY strict JSON: {\"summary\":\"...\",\"actions\":[\"one command per line\"]}. Maximum 12 actions. Allowed command grammar: 'open Gmail' or 'open <installed app name>'; 'check system updates'; 'tap: <visible label>'; 'type: <ordinary non-sensitive text>'; 'scroll down'; 'scroll up'; 'back'; 'home'. Use exact user-provided text for typing; never invent message content, recipients, or values. Never create commands to enter passwords, passcodes, OTPs, verification/security codes, card data, or other credentials. Do not make purchases, send money, delete data, submit messages/forms, change security settings, or install/update software without a distinct user-confirmed tap; for such tasks stop before the final consequential tap and explain it must be reviewed and confirmed by the user. Do not bypass authentication or human verification. Since you cannot see the current screen, do not invent labels; use a likely visible label only when the user specified it, otherwise stop and explain what label the user needs to provide. This is a plan only: no action is executed."
+          },
+          { role: "user", content: "PHONE TASK TO PLAN:\n" + task }
+        ], { max_tokens: 900, temperature: 0.1 });
+        const parsed = parseJsonObject(planned?.response || "");
+        if (!parsed || !Array.isArray(parsed.actions)) throw new Error("The model did not return a valid phone action plan.");
+        const actions = parsed.actions.slice(0, 12).filter(x => typeof x === "string").map(x => x.trim()).filter(Boolean);
+        return json({ summary: String(parsed.summary || "Review this phone action plan before running it."), actions });
+      } catch (error) {
+        return json({ error: "Phone task planning failed.", detail: String(error?.message || error) }, 502);
+      }
+    }
+
     if (url.pathname === "/api/memory-summary") {
       if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
       if (!env.AI) return json({ error: "Cloudflare Workers AI binding 'AI' is not configured." }, 503);
