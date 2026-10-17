@@ -621,7 +621,17 @@ async function researchWeb(query) {
 
   const ranked = rankSearchCandidates(unique, query);
   const pages = await Promise.all(ranked.slice(0, Math.min(MAX_SOURCES * 2, 14)).map(fetchPage));
-  const usable = pages.filter(Boolean);
+  let usable = pages.filter(Boolean);
+
+  // Search providers sometimes block server-side requests. If none of their
+  // results produce readable pages, try official Cloudflare docs for Cloudflare
+  // queries and Wikipedia's public search API for general topics.
+  if (!usable.length) {
+    const fallbackCandidates = await fallbackResearchCandidates(query);
+    const fallbackPages = await Promise.all(fallbackCandidates.map(fetchPage));
+    usable = fallbackPages.filter(Boolean);
+  }
+
   const rankedPages = usable.map(page => ({
     ...page,
     _score: scoreResearchItem({ title: page.title, url: page.url }, query, page.text)
@@ -743,6 +753,41 @@ function buildResearchQueries(query) {
   ];
 }
 
+async function fallbackResearchCandidates(query) {
+  const candidates = [];
+  if (/cloudflare|workers ai|model catalog|llama-3\\.3-70b/i.test(query)) {
+    candidates.push({
+      title: "Cloudflare Workers AI model catalog",
+      url: "https://developers.cloudflare.com/workers-ai/models/index.md"
+    });
+    candidates.push({
+      title: "Cloudflare Workers AI changelog",
+      url: "https://developers.cloudflare.com/changelog/product/workers-ai/"
+    });
+  }
+
+  try {
+    const response = await fetch(
+      "https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=" +
+        encodeURIComponent(query) + "&format=json&utf8=1&srlimit=5",
+      { headers: { "User-Agent": "FreeAppAI/1.1 (research fallback)" }, signal: AbortSignal.timeout(5000) }
+    );
+    if (response.ok) {
+      const data = await response.json();
+      for (const item of data?.query?.search || []) {
+        if (!item.title) continue;
+        candidates.push({
+          title: item.title,
+          url: "https://en.wikipedia.org/wiki/" + encodeURIComponent(item.title.replace(/ /g, "_"))
+        });
+      }
+    }
+  } catch {
+    // If all sources fail, research is explicitly reported as unavailable.
+  }
+  return candidates.slice(0, MAX_SOURCES);
+}
+
 async function searchDuckDuckGo(query) {
   // Search providers can rate-limit or change their markup. Try DuckDuckGo's
   // full HTML endpoint first, then its lightweight endpoint, then Bing HTML.
@@ -830,7 +875,7 @@ async function fetchPage(item) {
     if (!response.ok) return null;
 
     const type = response.headers.get("content-type") || "";
-    if (!type.includes("text/html") && !type.includes("text/plain") && !type.includes("application/xhtml")) return null;
+    if (!type.includes("text/html") && !type.includes("text/plain") && !type.includes("text/markdown") && !type.includes("application/xhtml")) return null;
 
     const text = extractText(await response.text()).slice(0, MAX_SOURCE_CHARS);
     if (text.length < 120) return null;
