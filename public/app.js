@@ -22,8 +22,9 @@ let conversationHistory = loadConversationHistory();
 if (clearConversationButton) {
   clearConversationButton.addEventListener("click", () => {
     conversationHistory = [];
-    try { localStorage.removeItem(HISTORY_KEY); } catch (_) {}
-    if (conversationNote) conversationNote.textContent = "Conversation context cleared. Your next question starts fresh.";
+    try { localStorage.removeItem(HISTORY_KEY); localStorage.removeItem(MEMORY_KEY); localStorage.removeItem(MEMORY_TURN_COUNT_KEY); } catch (_) {}
+    persistentMemory = "";
+    if (conversationNote) conversationNote.textContent = "Conversation context and saved memory cleared. Your next question starts fresh.";
     statusBox.textContent = "New conversation started.";
   });
 }
@@ -448,7 +449,7 @@ async function updatePersistentMemory(prompt) {
     turnCount = Number(localStorage.getItem(MEMORY_TURN_COUNT_KEY) || "0") + 1;
     localStorage.setItem(MEMORY_TURN_COUNT_KEY, String(turnCount));
   } catch (_) {}
-  const explicit = /\\b(remember|save this|keep in mind|don't forget|do not forget|store this)\\b/i.test(prompt || "");
+  const explicit = /\b(remember|save this|keep in mind|don't forget|do not forget|store this)\b/i.test(prompt || "");
   if (!explicit && turnCount % 4 !== 0) return;
   try {
     const response = await fetch(API_BASE + "/api/memory-summary", {
