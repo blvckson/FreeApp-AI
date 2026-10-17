@@ -139,6 +139,27 @@ if (phoneRunButton) phoneRunButton.addEventListener("click", async () => {
   }
   const lines = raw.split(/[\n;]+/).map(x => x.trim()).filter(Boolean);
   if (lines.length > 12) { phoneStatus.textContent = "For safety, run no more than 12 screen actions at once."; return; }
+  if (lines.some(line => !isPhoneActionSyntax(line))) {
+    phoneRunButton.disabled = true;
+    phoneStatus.textContent = "Turning your request into a reviewable phone-action plan...";
+    try {
+      const response = await fetch(API_BASE + "/api/phone-plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ task: raw })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Could not plan this phone task.");
+      if (!Array.isArray(data.actions) || !data.actions.length) throw new Error("No usable actions were planned. Add the exact visible button labels or break the task into smaller steps.");
+      phoneTaskInput.value = data.actions.join("\\n");
+      phoneStatus.textContent = (data.summary || "Phone plan prepared.") + " Review the commands shown above. Nothing has been executed yet. Tap Run Phone Actions again to run the reviewed steps; consequential actions still require confirmation.";
+    } catch (error) {
+      phoneStatus.textContent = error?.message || "Phone task planning failed.";
+    } finally {
+      phoneRunButton.disabled = false;
+    }
+    return;
+  }
   phoneActionsCancelled = false;
   phoneRunButton.disabled = true;
   try {
@@ -161,6 +182,16 @@ if (phoneRunButton) phoneRunButton.addEventListener("click", async () => {
     phoneRunButton.disabled = false;
   }
 });
+
+function isPhoneActionSyntax(line) {
+  const s = String(line || "").trim();
+  return /^(?:open|launch|start)\\s+.+$/i.test(s)
+    || /^(?:check|open|show).*(?:system|software|phone|android).*(?:update|updates)|^(?:check|open)\\s+(?:system )?updates?$/i.test(s)
+    || /^(?:scroll down|swipe up|scroll up|swipe down|back|go back|home|go home)$/i.test(s)
+    || /^(?:tap|click|press)(?:\\s+text)?\\s*:.+$/i.test(s)
+    || /^(?:tap|click|press)\\s+.+$/i.test(s)
+    || /^(?:type|enter text|write)\\s*:.+$/i.test(s);
+}
 
 function parsePhoneAction(line) {
   const s = line.trim();
