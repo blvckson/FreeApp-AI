@@ -184,7 +184,7 @@ export default {
           ...(memorySummary ? [{ role: "system", content: "PERSISTENT USER MEMORY (context only; prefer newer explicit statements in the current conversation if there is a conflict):\\n" + memorySummary }] : []),
           ...history,
           { role: "user", content:
-            `SUPPORTING EVIDENCE FOR THE CURRENT REQUEST:\n${evidence}\n\nCURRENT USER MESSAGE:\n${prompt}\n\nRespond to the current message directly. Use earlier conversation messages only to maintain context and resolve references. Give a detailed, well-organised answer with relevant explanations, practical suggestions, examples, and next steps where useful. Avoid unrelated tangents. If web research was supplied, include a Sources section containing only URLs actually used.`
+            `SUPPORTING EVIDENCE FOR THE CURRENT REQUEST:\n${evidence}\n\nCURRENT USER MESSAGE:\n${prompt}\n\nRespond to the current message directly. Use earlier conversation messages only to maintain context and resolve references. Give a detailed, well-organised answer with relevant explanations, practical suggestions, examples, and next steps where useful. Avoid unrelated tangents. If web research was supplied, include a Sources section containing only URLs actually used. For programming or app-building tasks, clearly distinguish a design/pseudocode from a complete implementation. State explicitly when code has not been compiled or executed in this environment, and never imply that a build or test succeeded unless it actually did.`
           }
         ];
 
@@ -238,10 +238,22 @@ export default {
           }
         }
 
+        // Guarantee that retrieved sources are visible to the user even if the
+        // model forgets to add a Sources section. Only cite pages actually fetched.
+        if (sources.length) {
+          const missingSourceUrls = sources.filter(source => !responseText.includes(source.url));
+          if (missingSourceUrls.length) {
+            responseText = responseText.trim() + "\n\n## Sources\n" +
+              sources.map(source => "- " + source.title + ": " + source.url).join("\n");
+          }
+        }
+
         return json({
           result: responseText || "The AI returned no text.",
           media: buildMedia(prompt, sources),
           researched: sources.length > 0,
+          researchAttempted: true,
+          researchSourceCount: sources.length,
           qualityReviewUsed,
           complexity: complexity.level,
           sources: sources.map(s => ({ title: s.title, url: s.url }))
