@@ -124,7 +124,7 @@ export default {
       if (!env.AI) return json({ error: "Cloudflare Workers AI binding 'AI' is not configured." }, 503);
       let body;
       try { body = await request.json(); } catch { return json({ error: "Invalid JSON request." }, 400); }
-      const history = normalizeHistory(body.history);\n      const memorySummary = typeof body.memorySummary === "string" ? body.memorySummary.trim().slice(0, 3500) : "";
+      const history = normalizeHistory(body.history);
       const previous = typeof body.previousSummary === "string" ? body.previousSummary.trim().slice(0, 3500) : "";
       if (!history.length) return json({ summary: previous, updated: false });
       try {
@@ -160,6 +160,7 @@ export default {
       const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
       const images = Array.isArray(body.images) ? body.images.slice(0, MAX_IMAGES) : [];
       const history = normalizeHistory(body.history);
+      const memorySummary = typeof body.memorySummary === "string" ? body.memorySummary.trim().slice(0, 3500) : "";
       if (!prompt) return json({ error: "Prompt is required." }, 400);
       if (prompt.length > MAX_PROMPT) {
         return json({ error: `Prompt is too long. Maximum is ${MAX_PROMPT} characters.` }, 400);
