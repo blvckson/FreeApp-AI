@@ -42,7 +42,37 @@ const builtinNarratorClose = document.getElementById("builtin-narrator-close");
 const builtinSpeakButton = document.getElementById("builtin-speak-button");
 const builtinStopButton = document.getElementById("builtin-stop-button");
 const builtinAutoButton = document.getElementById("builtin-auto-button");
-if (builtinNarratorButton) builtinNarratorButton.addEventListener("click", () => builtinNarratorModal.hidden = false);
+
+// Keep the chat composer and answer visible; put every secondary control in
+// one compact, scrollable three-dot menu.
+const functionMenu = document.getElementById("function-menu");
+const functionMenuContent = document.getElementById("function-menu-content");
+const menuToggle = document.getElementById("menu-toggle");
+const menuClose = document.getElementById("menu-close");
+const narratorStatus = document.getElementById("narrator-status");
+
+if (functionMenu && functionMenuContent) {
+  const moveIntoMenu = (element) => { if (element) functionMenuContent.appendChild(element); };
+  moveIntoMenu(imageInput && imageInput.closest(".controls"));
+  moveIntoMenu(clearConversationButton);
+  moveIntoMenu(conversationNote);
+  moveIntoMenu(document.querySelector(".website-card"));
+  moveIntoMenu(document.querySelector(".phone-control-card"));
+}
+function setFunctionMenu(open) {
+  if (!functionMenu || !menuToggle) return;
+  functionMenu.hidden = !open;
+  menuToggle.setAttribute("aria-expanded", String(open));
+  menuToggle.setAttribute("aria-label", open ? "Close all functions" : "Open all functions");
+}
+if (menuToggle) menuToggle.addEventListener("click", () => setFunctionMenu(functionMenu ? functionMenu.hidden : false));
+if (menuClose) menuClose.addEventListener("click", () => setFunctionMenu(false));
+document.addEventListener("keydown", event => { if (event.key === "Escape") setFunctionMenu(false); });
+document.addEventListener("click", event => {
+  if (functionMenu && !functionMenu.hidden && !functionMenu.contains(event.target) && event.target !== menuToggle) setFunctionMenu(false);
+});
+
+if (builtinNarratorButton) builtinNarratorButton.addEventListener("click", () => { builtinNarratorModal.hidden = false; if (narratorStatus) narratorStatus.textContent = "Ready. Tap Read Latest Answer to begin."; });
 if (builtinNarratorClose) builtinNarratorClose.addEventListener("click", () => builtinNarratorModal.hidden = true);
 if (builtinSpeakButton) builtinSpeakButton.addEventListener("click", () => speakText(resultBox.textContent || "There is no AI answer to read yet."));
 if (builtinStopButton) builtinStopButton.addEventListener("click", stopNarrator);
@@ -521,34 +551,67 @@ function saveConversationHistory() {
   }
 }
 
-function stopNarrator() { if (window.FreeAppNativeVoice?.stop) window.FreeAppNativeVoice.stop(); if ("speechSynthesis" in window) window.speechSynthesis.cancel(); }
+function stopNarrator() {
+  if (window.FreeAppNativeVoice?.stop) {
+    try { window.FreeAppNativeVoice.stop(); } catch (_) {}
+  }
+  if ("speechSynthesis" in window) {
+    try { window.speechSynthesis.cancel(); } catch (_) {}
+  }
+  if (narratorStatus) narratorStatus.textContent = "Narration stopped.";
+}
 
 function speakText(text) {
-  // Prefer the app's native, device-local narrator when running inside the
-  // Android build. It requires no cloud voice API and works independently of
-  // browser voice availability.
+  const plainText = String(text || "").replace(/\s+/g, " ").trim();
+  if (!plainText) {
+    if (narratorStatus) narratorStatus.textContent = "There is no answer text to read yet.";
+    return;
+  }
+  // Native Android TTS is preferred, but queue the whole answer so long
+  // responses can be split into safe utterance chunks on the Android side.
   if (window.FreeAppNativeVoice && typeof window.FreeAppNativeVoice.speak === "function") {
     try {
-      window.FreeAppNativeVoice.speak(String(text).slice(0, 12000));
+      window.FreeAppNativeVoice.speak(plainText.slice(0, 12000));
+      if (narratorStatus) narratorStatus.textContent = "Reading the answer aloud. Tap Stop to cancel.";
       return;
-    } catch (_) {}
+    } catch (_) {
+      if (narratorStatus) narratorStatus.textContent = "Device narrator failed; trying browser speech instead.";
+    }
   }
 
-  // Web Speech is the browser fallback for the web/PWA version.
-  if (!("speechSynthesis" in window)) return;
+  if (!("speechSynthesis" in window)) {
+    if (narratorStatus) narratorStatus.textContent = "Narration is unavailable. Check that a Text-to-Speech engine is installed and enabled.";
+    return;
+  }
   try {
     window.speechSynthesis.cancel();
     const voices = window.speechSynthesis.getVoices();
     const preferred = voices.find(v => /^en(-UG|-GB)?$/i.test(v.lang))
       || voices.find(v => /^en/i.test(v.lang))
       || null;
-    const utterance = new SpeechSynthesisUtterance(text);
-    if (preferred) utterance.voice = preferred;
-    utterance.rate = 1.0;
-    utterance.pitch = 0.95;
-    utterance.volume = 1.0;
-    window.speechSynthesis.speak(utterance);
-  } catch (_) {}
+    const chunks = plainText.match(/[\s\S]{1,2500}(?:\s|$)/g) || [plainText];
+    let index = 0;
+    const speakNext = () => {
+      if (index >= chunks.length) {
+        if (narratorStatus) narratorStatus.textContent = "Finished reading the answer.";
+        return;
+      }
+      const utterance = new SpeechSynthesisUtterance(chunks[index++].trim());
+      if (preferred) utterance.voice = preferred;
+      utterance.rate = 1.0;
+      utterance.pitch = 0.98;
+      utterance.volume = 1.0;
+      utterance.onend = speakNext;
+      utterance.onerror = () => {
+        if (narratorStatus) narratorStatus.textContent = "Browser narration stopped or failed. Try again or check your device TTS settings.";
+      };
+      window.speechSynthesis.speak(utterance);
+    };
+    if (narratorStatus) narratorStatus.textContent = "Reading the answer aloud. Tap Stop to cancel.";
+    speakNext();
+  } catch (_) {
+    if (narratorStatus) narratorStatus.textContent = "Narration failed. Check your device Text-to-Speech settings.";
+  }
 }
 
 function toDataUrl(file) {
