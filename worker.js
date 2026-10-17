@@ -732,45 +732,80 @@ function buildResearchQueries(query) {
 }
 
 async function searchDuckDuckGo(query) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 7000);
+  // Search providers can rate-limit or change their markup. Try DuckDuckGo's
+  // full HTML endpoint first, then its lightweight endpoint, then Bing HTML.
+  const providers = [
+    { url: "https://html.duckduckgo.com/html/?q=" + encodeURIComponent(query), parse: parseDuckDuckGoResults },
+    { url: "https://lite.duckduckgo.com/lite/?q=" + encodeURIComponent(query), parse: parseDuckDuckGoResults },
+    { url: "https://www.bing.com/search?q=" + encodeURIComponent(query), parse: parseBingResults }
+  ];
 
-  try {
-    const response = await fetch(
-      "https://html.duckduckgo.com/html/?q=" + encodeURIComponent(query),
-      { headers: { "User-Agent": "Mozilla/5.0 (compatible; FreeAppAI/1.0)" }, signal: controller.signal }
-    );
-    if (!response.ok) return [];
-
-    const html = await response.text();
-    const links = [];
-    const re = new RegExp(`<a[^>]*class="[^"]*result__a[^"]*"[^>]*href="([^"]+)"[^>]*>([\\s\\S]*?)</a>`, "gi");
-    let m;
-
-    while ((m = re.exec(html)) && links.length < 8) {
-      let href = decodeHtml(m[1]);
-      try {
-        if (href.startsWith("//")) href = "https:" + href;
-        const u = new URL(href);
-        if (u.hostname.includes("duckduckgo.com")) {
-          const target = u.searchParams.get("uddg");
-          if (target) href = decodeURIComponent(target);
-        }
-        const parsed = new URL(href);
-        if (!/^https?:$/.test(parsed.protocol)) continue;
-        if (!links.some(x => x.url === parsed.href)) {
-          links.push({ url: parsed.href, title: cleanText(m[2]) });
-        }
-      } catch {}
+  for (const provider of providers) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 6500);
+    try {
+      const response = await fetch(provider.url, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (compatible; FreeAppAI/1.1)",
+          "Accept": "text/html,application/xhtml+xml"
+        },
+        signal: controller.signal
+      });
+      if (!response.ok) continue;
+      const html = await response.text();
+      const links = provider.parse(html);
+      if (links.length) return links.slice(0, 8);
+    } catch {
+      // Try the next provider; one failed search must not cancel all research.
+    } finally {
+      clearTimeout(timer);
     }
-    return links;
-  } catch {
-    return [];
-  } finally {
-    clearTimeout(timer);
   }
+  return [];
 }
 
+function parseDuckDuckGoResults(html) {
+  const links = [];
+  // Match result anchors independent of whether href or class appears first.
+  const anchors = html.match(/<a\b[^>]*>[\s\S]*?<\/a>/gi) || [];
+  for (const anchor of anchors) {
+    if (!/result__a|result-link/i.test(anchor)) continue;
+    const hrefMatch = anchor.match(/href\s*=\s*["']([^"']+)["']/i);
+    if (!hrefMatch) continue;
+    let href = decodeHtml(hrefMatch[1]);
+    try {
+      if (href.startsWith("//")) href = "https:" + href;
+      let parsed = new URL(href);
+      if (parsed.hostname.includes("duckduckgo.com")) {
+        const target = parsed.searchParams.get("uddg");
+        if (target) href = target;
+      }
+      parsed = new URL(href);
+      if (!/^https?:$/.test(parsed.protocol) || /duckduckgo\.com$/i.test(parsed.hostname)) continue;
+      const title = cleanText(anchor.replace(/<\/?a\b[^>]*>/gi, ""));
+      if (title && !links.some(x => x.url === parsed.href)) links.push({ url: parsed.href, title });
+    } catch {}
+    if (links.length >= 8) break;
+  }
+  return links;
+}
+
+function parseBingResults(html) {
+  const links = [];
+  const blocks = html.match(/<li\b[^>]*class=["'][^"']*b_algo[^"']*["'][^>]*>[\s\S]*?<\/li>/gi) || [];
+  for (const block of blocks) {
+    const match = block.match(/<a\b[^>]*href=["'](https?:[^"'#]+)["'][^>]*>([\s\S]*?)<\/a>/i);
+    if (!match) continue;
+    try {
+      const parsed = new URL(decodeHtml(match[1]));
+      if (!/^https?:$/.test(parsed.protocol) || /bing\.com$/i.test(parsed.hostname)) continue;
+      const title = cleanText(match[2]);
+      if (title && !links.some(x => x.url === parsed.href)) links.push({ url: parsed.href, title });
+    } catch {}
+    if (links.length >= 8) break;
+  }
+  return links;
+}
 async function fetchPage(item) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 6000);
