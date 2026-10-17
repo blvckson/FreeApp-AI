@@ -592,7 +592,7 @@ async function researchWeb(query) {
   const domains = new Set();
   for (const page of rankedPages) {
     let domain = "";
-    try { domain = new URL(page.url).hostname.replace(/^www\\./, ""); } catch {}
+    try { domain = new URL(page.url).hostname.replace(/^www\./, ""); } catch {}
     if (domain && domains.has(domain) && selected.length < MAX_SOURCES - 2) continue;
     selected.push({ title: page.title, url: page.url, text: page.text });
     if (domain) domains.add(domain);
@@ -617,8 +617,8 @@ function scoreResearchItem(item, query, body = "") {
     if (url.includes(term)) score += 2;
     if (text.includes(term)) score += 1;
   }
-  if (/\\.(gov|edu)(\\.|$)/i.test(url)) score += 2;
-  if (/docs\\.|documentation|research|journal|doi\\.org/i.test(url)) score += 1;
+  if (/\.(gov|edu)(\.|$)/i.test(url)) score += 2;
+  if (/docs\.|documentation|research|journal|doi\.org/i.test(url)) score += 1;
   return score;
 }
 
