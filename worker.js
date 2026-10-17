@@ -620,7 +620,7 @@ function buildMedia(prompt, sources) {
 async function researchWeb(query) {
   const queries = buildResearchQueries(query).slice(0, MAX_RESEARCH_QUERIES);
   const batches = await Promise.all(queries.map(searchDuckDuckGo));
-  const isCloudflareQuery = /cloudflare|workers\\s+ai|model catalog|llama-3\\.3-70b/i.test(query);
+  const isCloudflareQuery = /cloudflare|workers\s+ai|model catalog|llama-3\.3-70b/i.test(query);
   // Mix direct primary-source candidates into relevant searches even when one
   // search result happens to be readable; this avoids treating one page as enough.
   const directCandidates = await fallbackResearchCandidates(query, { includeGeneralFallback: !isCloudflareQuery });
@@ -657,7 +657,7 @@ async function researchWeb(query) {
   const domainCounts = new Map();
   for (const page of rankedPages) {
     let domain = "";
-    try { domain = new URL(page.url).hostname.replace(/^www\\./, ""); } catch {}
+    try { domain = new URL(page.url).hostname.replace(/^www\./, ""); } catch {}
     // Preserve useful primary sources for vendor-specific research while
     // preventing one domain from filling the entire source list.
     if (domain && (domainCounts.get(domain) || 0) >= 3) continue;
@@ -728,10 +728,10 @@ function makeContextualResearchQuery(history, prompt) {
 
 function isComplexAppBuildRequest(prompt) {
   const text = String(prompt || "").toLowerCase();
-  const hasBuildVerb = /\\b(build|create|implement|design|architect|develop|make)\\b/.test(text);
-  const hasAppTarget = /\\b(app|application|android|ios|web app|mobile app|software system|mvp)\\b/.test(text);
-  const hasDeliverySignals = /\\b(build-ready|architecture|data flow|schema|acceptance tests|test cases|offline-first|complete implementation|production-minded)\\b/.test(text)
-    || /\\b(deliver|requirements|module|database)\\b/.test(text);
+  const hasBuildVerb = /\b(build|create|implement|design|architect|develop|make)\b/.test(text);
+  const hasAppTarget = /\b(app|application|android|ios|web app|mobile app|software system|mvp)\b/.test(text);
+  const hasDeliverySignals = /\b(build-ready|architecture|data flow|schema|acceptance tests|test cases|offline-first|complete implementation|production-minded)\b/.test(text)
+    || /\b(deliver|requirements|module|database)\b/.test(text);
   return (hasBuildVerb && hasAppTarget) || (hasAppTarget && hasDeliverySignals);
 }
 
@@ -783,7 +783,7 @@ function buildResearchQueries(query) {
 
 async function fallbackResearchCandidates(query, options = {}) {
   const candidates = [];
-  if (/cloudflare|workers\\s+ai|model catalog|llama-3\\.3-70b/i.test(query)) {
+  if (/cloudflare|workers\s+ai|model catalog|llama-3\.3-70b/i.test(query)) {
     candidates.push(
       { title: "Official Cloudflare Workers AI model catalog", url: "https://developers.cloudflare.com/workers-ai/models/" },
       { title: "Official Cloudflare Workers AI changelog", url: "https://developers.cloudflare.com/changelog/product/workers-ai/" },
@@ -917,7 +917,7 @@ async function fetchPage(item) {
 
 function extractText(html) {
   const withoutBlocks = html.replace(
-    new RegExp("<(?:script|style|noscript|svg)\\b[\\s\\S]*?</(?:script|style|noscript|svg)>", "gi"),
+    new RegExp("<(?:script|style|noscript|svg)\b[\s\\S]*?</(?:script|style|noscript|svg)>", "gi"),
     " "
   );
   return decodeHtml(withoutBlocks.replace(new RegExp("<[^>]+>", "g"), " "))
@@ -1120,8 +1120,8 @@ function validatePublicWebsiteUrl(raw) {
   const host = target.hostname.toLowerCase();
   if (!host || host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") ||
       host === "metadata.google.internal" || host === "169.254.169.254" ||
-      /^(127\\.|10\\.|192\\.168\\.|0\\.|169\\.254\\.)/.test(host) ||
-      /^172\\.(1[6-9]|2[0-9]|3[01])\\./.test(host) || host.includes(":")) {
+      /^(127\.|10\.|192\.168\.|0\.|169\.254\.)/.test(host) ||
+      /^172\.(1[6-9]|2[0-9]|3[01])\./.test(host) || host.includes(":")) {
     throw new Error("Private, local-network, and link-local addresses are blocked. Use a public website address.");
   }
   target.hash = "";
