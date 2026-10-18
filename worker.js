@@ -759,15 +759,11 @@ async function runChatModel(env, messages, options = {}) {
     temperature: options.temperature ?? 0.2
   };
 
-  // Prefer an independently hosted Gemini model when a server-side key is present.
-  // The key is read only from the runtime environment and is never returned to clients.
+  // If Gemini is configured, use it as the active provider and fail clearly if it
+  // fails. Silently switching to Cloudflare masks Gemini configuration/API errors
+  // and can consume an exhausted or paid allocation. Never include the API key.
   if (env.GEMINI_API_KEY) {
-    try {
-      return await runGeminiModel(env, settings);
-    } catch (geminiError) {
-      // Keep the existing provider as a fallback during migration or provider outages.
-      if (!env.AI) throw geminiError;
-    }
+    return await runGeminiModel(env, settings);
   }
 
   if (!env.AI) throw new Error("No available AI provider is configured.");
@@ -823,8 +819,18 @@ async function runGeminiModel(env, settings) {
     signal: AbortSignal.timeout(120000)
   });
   if (!response.ok) {
-    // Do not include the request URL or key in any error message.
-    throw new Error("Gemini request failed with HTTP " + response.status + ".");
+    // Capture Google's safe error status/message for diagnosis, never the request URL
+    // or API key. Keep the detail short to avoid leaking unrelated response content.
+    let detail = "";
+    try {
+      const errorBody = await response.json();
+      const apiError = errorBody?.error || {};
+      const status = typeof apiError.status === "string" ? apiError.status : "";
+      const message = typeof apiError.message === "string" ? apiError.message : "";
+      detail = [status, message].filter(Boolean).join(": ").slice(0, 300);
+    } catch {}
+    throw new Error("Gemini request failed with HTTP " + response.status +
+      (detail ? " (" + detail + ")" : "") + ".");
   }
   const data = await response.json();
   const parts = data?.candidates?.[0]?.content?.parts || [];
