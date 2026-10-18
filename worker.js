@@ -165,8 +165,8 @@ export default {
       if (prompt.length > MAX_PROMPT) {
         return json({ error: `Prompt is too long. Maximum is ${MAX_PROMPT} characters.` }, 400);
       }
-      if (!env.AI) {
-        return json({ error: "Cloudflare Workers AI binding 'AI' is not configured." }, 503);
+      if (!env.AI && !env.GEMINI_API_KEY) {
+        return json({ error: "No AI provider is configured. Configure GEMINI_API_KEY or the existing AI binding." }, 503);
       }
 
       try {
@@ -758,6 +758,19 @@ async function runChatModel(env, messages, options = {}) {
     max_tokens: options.max_tokens || 4096,
     temperature: options.temperature ?? 0.2
   };
+
+  // Prefer an independently hosted Gemini model when a server-side key is present.
+  // The key is read only from the runtime environment and is never returned to clients.
+  if (env.GEMINI_API_KEY) {
+    try {
+      return await runGeminiModel(env, settings);
+    } catch (geminiError) {
+      // Keep the existing provider as a fallback during migration or provider outages.
+      if (!env.AI) throw geminiError;
+    }
+  }
+
+  if (!env.AI) throw new Error("No available AI provider is configured.");
   try {
     return await env.AI.run(env.FREEAPP_AI_MODEL || DEFAULT_MODEL, settings);
   } catch (primaryError) {
@@ -767,6 +780,60 @@ async function runChatModel(env, messages, options = {}) {
       temperature: Math.min(settings.temperature, 0.2)
     });
   }
+}
+
+async function runGeminiModel(env, settings) {
+  const model = String(env.GEMINI_MODEL || "gemini-2.5-flash").trim();
+  if (!/^[a-zA-Z0-9._-]+$/.test(model)) throw new Error("Invalid Gemini model identifier.");
+
+  const systemParts = [];
+  const contents = [];
+  for (const message of settings.messages || []) {
+    const text = typeof message?.content === "string" ? message.content : "";
+    if (!text) continue;
+    if (message.role === "system") {
+      systemParts.push(text);
+      continue;
+    }
+    const role = message.role === "assistant" ? "model" : "user";
+    const previous = contents[contents.length - 1];
+    if (previous && previous.role === role) {
+      previous.parts.push({ text });
+    } else {
+      contents.push({ role, parts: [{ text }] });
+    }
+  }
+  if (!contents.length) throw new Error("Gemini request contained no user or assistant messages.");
+
+  const payload = {
+    contents,
+    generationConfig: {
+      maxOutputTokens: settings.max_tokens || 4096,
+      temperature: settings.temperature ?? 0.2
+    }
+  };
+  if (systemParts.length) payload.systemInstruction = { parts: [{ text: systemParts.join("\n\n") }] };
+
+  const endpoint = "https://generativelanguage.googleapis.com/v1beta/models/" +
+    encodeURIComponent(model) + ":generateContent?key=" + encodeURIComponent(env.GEMINI_API_KEY);
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(120000)
+  });
+  if (!response.ok) {
+    // Do not include the request URL or key in any error message.
+    throw new Error("Gemini request failed with HTTP " + response.status + ".");
+  }
+  const data = await response.json();
+  const parts = data?.candidates?.[0]?.content?.parts || [];
+  const answer = parts.map(part => typeof part.text === "string" ? part.text : "").join("").trim();
+  if (!answer) {
+    const reason = String(data?.candidates?.[0]?.finishReason || "empty response");
+    throw new Error("Gemini returned no text (" + reason + ").");
+  }
+  return { response: answer };
 }
 
 function buildResearchQueries(query) {
