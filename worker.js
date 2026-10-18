@@ -784,7 +784,7 @@ async function runChatModel(env, messages, options = {}) {
       return await runGeminiModel(env, settings, { model: primaryModel, timeoutMs: 20000 });
     } catch (primaryError) {
       const primaryMessage = String(primaryError?.message || primaryError);
-      if (/HTTP (?:429|503)\\b/.test(primaryMessage)) {
+      if (/HTTP (?:429|503)\b/.test(primaryMessage)) {
         await new Promise(resolve => setTimeout(resolve, 800));
         try {
           return await runGeminiModel(env, settings, { model: primaryModel, timeoutMs: 6000 });
