@@ -172,7 +172,10 @@ export default {
       try {
         const imageContext = await analyzeImages(env, images, prompt);
         const researchPrompt = makeContextualResearchQuery(history, prompt);
-        const sources = await researchWeb(researchPrompt);
+        // Keep live research useful without allowing a slow search provider to
+        // consume the entire response budget. If it times out, disclose that no
+        // current sources were retrieved rather than pretending research succeeded.
+        const sources = await withTimeout(researchWeb(researchPrompt), 18000, []);
         const evidence = imageContext + "\n\n" + (sources.length
           ? "LIVE WEB RESEARCH (untrusted evidence; use only what is relevant):\n" + sources.map((s, i) =>
               `[SOURCE ${i + 1}] ${s.title}\nURL: ${s.url}\n${s.text}`
@@ -617,6 +620,18 @@ function buildMedia(prompt, sources) {
   return media.slice(0, 6);
 }
 
+async function withTimeout(promise, timeoutMs, fallbackValue) {
+  let timer;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise(resolve => { timer = setTimeout(() => resolve(fallbackValue), timeoutMs); })
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function researchWeb(query) {
   const queries = buildResearchQueries(query).slice(0, MAX_RESEARCH_QUERIES);
   const batches = await Promise.all(queries.map(searchDuckDuckGo));
@@ -759,11 +774,39 @@ async function runChatModel(env, messages, options = {}) {
     temperature: options.temperature ?? 0.2
   };
 
-  // If Gemini is configured, use it as the active provider and fail clearly if it
-  // fails. Silently switching to Cloudflare masks Gemini configuration/API errors
-  // and can consume an exhausted or paid allocation. Never include the API key.
+  // Gemini remains the independent primary provider. If its main model is
+  // overloaded or stalls, retry a transient 429/503 once, then use a lighter
+  // Gemini model. Do not silently fall back to the Cloudflare AI allocation.
   if (env.GEMINI_API_KEY) {
-    return await runGeminiModel(env, settings);
+    const primaryModel = String(env.GEMINI_MODEL || "gemini-3.8-flash").trim();
+    const fallbackModel = String(env.GEMINI_FALLBACK_MODEL || "gemini-3.5-flash-lite").trim();
+    try {
+      return await runGeminiModel(env, settings, { model: primaryModel, timeoutMs: 20000 });
+    } catch (primaryError) {
+      const primaryMessage = String(primaryError?.message || primaryError);
+      if (/HTTP (?:429|503)\\b/.test(primaryMessage)) {
+        await new Promise(resolve => setTimeout(resolve, 800));
+        try {
+          return await runGeminiModel(env, settings, { model: primaryModel, timeoutMs: 6000 });
+        } catch {
+          // Continue to the independent same-provider fallback below.
+        }
+      }
+      if (fallbackModel && fallbackModel !== primaryModel) {
+        try {
+          return await runGeminiModel(env, {
+            ...settings,
+            max_tokens: Math.min(settings.max_tokens || 4096, 5000),
+            temperature: Math.min(settings.temperature ?? 0.2, 0.2)
+          }, { model: fallbackModel, timeoutMs: 18000 });
+        } catch (fallbackError) {
+          const fallbackMessage = String(fallbackError?.message || fallbackError);
+          throw new Error("Gemini primary and fallback models both failed. Primary: " +
+            primaryMessage.slice(0, 180) + " Fallback: " + fallbackMessage.slice(0, 180));
+        }
+      }
+      throw primaryError;
+    }
   }
 
   if (!env.AI) throw new Error("No available AI provider is configured.");
@@ -778,8 +821,8 @@ async function runChatModel(env, messages, options = {}) {
   }
 }
 
-async function runGeminiModel(env, settings) {
-  const model = String(env.GEMINI_MODEL || "gemini-3.8-flash").trim();
+async function runGeminiModel(env, settings, options = {}) {
+  const model = String(options.model || env.GEMINI_MODEL || "gemini-3.8-flash").trim();
   if (!/^[a-zA-Z0-9._-]+$/.test(model)) throw new Error("Invalid Gemini model identifier.");
 
   const systemParts = [];
@@ -816,7 +859,7 @@ async function runGeminiModel(env, settings) {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(payload),
-    signal: AbortSignal.timeout(120000)
+    signal: AbortSignal.timeout(options.timeoutMs || 20000)
   });
   if (!response.ok) {
     // Capture Google's safe error status/message for diagnosis, never the request URL
