@@ -779,7 +779,7 @@ async function runChatModel(env, messages, options = {}) {
 }
 
 async function runGeminiModel(env, settings) {
-  const model = String(env.GEMINI_MODEL || "gemini-2.5-flash").trim();
+  const model = String(env.GEMINI_MODEL || "gemini-3.8-flash").trim();
   if (!/^[a-zA-Z0-9._-]+$/.test(model)) throw new Error("Invalid Gemini model identifier.");
 
   const systemParts = [];
