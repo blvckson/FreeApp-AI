@@ -147,6 +147,21 @@ public class MainActivity extends Activity {
         });
 
         webView.setWebViewClient(new WebViewClientCompat() {
+            private boolean rendererRecoveryScheduled = false;
+
+            @Override
+            public boolean onRenderProcessGone(WebView view, android.webkit.RenderProcessGoneDetail detail) {
+                // Android 8+ can kill WebView's renderer under memory pressure. Recover
+                // the activity instead of letting a dead WebView take the chat with it.
+                if (!rendererRecoveryScheduled) {
+                    rendererRecoveryScheduled = true;
+                    runOnUiThread(() -> {
+                        if (!isFinishing() && android.os.Build.VERSION.SDK_INT >= 26) recreate();
+                    });
+                }
+                return true;
+            }
+
             @Override
             public WebResourceResponse shouldInterceptRequest(
                     WebView view,
