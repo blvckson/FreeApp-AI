@@ -582,11 +582,15 @@ function scoreResearchItem(item, query, body = "") {
     if (url.includes(term)) score += 2;
     if (text.includes(term)) score += 1;
   }
-  if (/\.(gov|edu)(\.|$)/i.test(url)) score += 2;
-  if (/docs\.|documentation|research|journal|doi\.org/i.test(url)) score += 1;
+  // Evidence-quality signals are heuristics, not guarantees.
+  if (/\.(gov|gov\.[a-z]{2}|edu|ac\.[a-z]{2})(\.|$)/i.test(url)) score += 5;
+  if (/doi\.org\//i.test(url) || /\b(pubmed|europepmc|arxiv|nature|science|sciencedirect|springer|wiley|nejm|bmj|cochranelibrary)\./i.test(url)) score += 4;
+  if (/\b(docs|documentation|standards|policy|research|journal|data|statistics)\./i.test(url)) score += 2;
+  if (/\b(blog|forum|reddit|quora|pinterest)\./i.test(url)) score -= 2;
+  if (/sign in|subscribe to continue|access denied|javascript is disabled|enable javascript/.test(text)) score -= 4;
+  if (text.length < 350) score -= 2;
   return score;
 }
-
 function rankSearchCandidates(items, query) {
   return items.map((item, index) => ({
     ...item,
@@ -769,17 +773,20 @@ async function runGeminiModel(env, settings, options = {}) {
 }
 
 function buildResearchQueries(query) {
-  const q = query.trim();
-  // Search complementary angles so research does not depend on a single phrasing.
-  return [
+  const q = String(query || "").trim().replace(/\s+/g, " ");
+  if (!q) return [];
+  // Use distinct research intents, not five near-identical searches. Include
+  // current-year wording so time-sensitive searches can surface newer evidence.
+  const currentYear = new Date().getUTCFullYear();
+  const variants = [
     q,
-    q + " official sources primary documentation",
-    q + " recent evidence developments",
-    q + " academic research papers independent analysis",
-    q + " practical examples implementation limitations"
+    '"' + q.replace(/"/g, "") + '"',
+    q + " official primary source documentation",
+    q + " academic study systematic review independent evidence",
+    q + " latest developments " + currentYear + " limitations counterevidence"
   ];
+  return [...new Set(variants)].slice(0, MAX_RESEARCH_QUERIES);
 }
-
 async function fallbackResearchCandidates(query, options = {}) {
   const candidates = [];
   if (/cloudflare|workers\s+ai|model catalog|llama-3\.3-70b/i.test(query)) {
@@ -815,38 +822,46 @@ async function fallbackResearchCandidates(query, options = {}) {
 }
 
 async function searchDuckDuckGo(query) {
-  // Search providers can rate-limit or change their markup. Try DuckDuckGo's
-  // full HTML endpoint first, then its lightweight endpoint, then Bing HTML.
+  // Query independent providers concurrently so one healthy index does not
+  // prevent us from considering useful results from other indexes.
   const providers = [
-    { url: "https://html.duckduckgo.com/html/?q=" + encodeURIComponent(query), parse: parseDuckDuckGoResults },
-    { url: "https://lite.duckduckgo.com/lite/?q=" + encodeURIComponent(query), parse: parseDuckDuckGoResults },
-    { url: "https://www.bing.com/search?q=" + encodeURIComponent(query), parse: parseBingResults }
+    { name: "ddg-html", url: "https://html.duckduckgo.com/html/?q=" + encodeURIComponent(query), parse: parseDuckDuckGoResults },
+    { name: "ddg-lite", url: "https://lite.duckduckgo.com/lite/?q=" + encodeURIComponent(query), parse: parseDuckDuckGoResults },
+    { name: "bing", url: "https://www.bing.com/search?q=" + encodeURIComponent(query), parse: parseBingResults }
   ];
-
-  for (const provider of providers) {
+  const results = await Promise.all(providers.map(async provider => {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 6500);
+    const timer = setTimeout(() => controller.abort(), 5500);
     try {
       const response = await fetch(provider.url, {
         headers: {
-          "User-Agent": "Mozilla/5.0 (compatible; FreeAppAI/1.1)",
+          "User-Agent": "Mozilla/5.0 (compatible; FreeAppAI/1.2 research)",
           "Accept": "text/html,application/xhtml+xml"
         },
         signal: controller.signal
       });
-      if (!response.ok) continue;
-      const html = await response.text();
-      const links = provider.parse(html);
-      if (links.length) return links.slice(0, 8);
+      if (!response.ok) return [];
+      return provider.parse(await response.text()).slice(0, 8).map(item => ({ ...item, _searchProvider: provider.name }));
     } catch {
-      // Try the next provider; one failed search must not cancel all research.
+      return [];
     } finally {
       clearTimeout(timer);
     }
+  }));
+  const seen = new Set();
+  const merged = [];
+  for (const item of results.flat()) {
+    try {
+      const u = new URL(item.url);
+      if (!/^https?:$/.test(u.protocol)) continue;
+      const key = u.origin + u.pathname.replace(/\/$/, "");
+      if (seen.has(key)) continue;
+      seen.add(key);
+      merged.push(item);
+    } catch {}
   }
-  return [];
+  return merged.slice(0, 16);
 }
-
 function parseDuckDuckGoResults(html) {
   const links = [];
   // Match result anchors independent of whether href or class appears first.
