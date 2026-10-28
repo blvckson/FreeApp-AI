@@ -12,12 +12,43 @@ const clearConversationButton = document.getElementById("clear-conversation-butt
 const conversationNote = document.getElementById("conversation-note");
 const HISTORY_KEY = "freeapp_ai_conversation_v1";
 const MEMORY_KEY = "freeapp_ai_memory_summary_v1";
+// Keep an in-progress prompt recoverable if Android kills the WebView/app.
+const DRAFT_KEY = "freeapp_ai_prompt_draft_v1";
+let draftSaveTimer = null;
 const MEMORY_TURN_COUNT_KEY = "freeapp_ai_memory_turn_count_v1";
 let persistentMemory = loadPersistentMemory();
 
 let selectedImages = [];
 let autoNarration = false;
 let conversationHistory = loadConversationHistory();
+
+// Restore unsent text after a renderer crash or app restart. Debounce writes so
+// typing a long prompt does not repeatedly serialize large strings on Android.
+try {
+  const savedDraft = localStorage.getItem(DRAFT_KEY);
+  if (savedDraft && promptBox && !promptBox.value) promptBox.value = savedDraft;
+} catch (_) {}
+
+function savePromptDraftNow() {
+  if (!promptBox) return;
+  try {
+    if (promptBox.value) localStorage.setItem(DRAFT_KEY, promptBox.value);
+    else localStorage.removeItem(DRAFT_KEY);
+  } catch (_) {
+    // Draft recovery is best-effort and must never block typing or sending.
+  }
+}
+
+if (promptBox) {
+  promptBox.addEventListener("input", () => {
+    if (draftSaveTimer) clearTimeout(draftSaveTimer);
+    draftSaveTimer = setTimeout(savePromptDraftNow, 900);
+  });
+  window.addEventListener("pagehide", savePromptDraftNow);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") savePromptDraftNow();
+  });
+}
 
 if (clearConversationButton) {
   clearConversationButton.addEventListener("click", () => {
@@ -359,9 +390,13 @@ async function askAI() {
     return;
   }
 
+  // Save before any asynchronous work so a crash during request generation
+  // does not lose the user's original prompt.
+  savePromptDraftNow();
   buildButton.disabled = true;
   statusBox.textContent = "FreeApp AI is processing your request...";
-  resultBox.textContent = "";
+  // Keep the previous answer visible until a new answer arrives; this avoids
+  // losing useful output if the WebView is killed during a long generation.
   mediaBox.replaceChildren();
   sourceList.replaceChildren();
   sourcesBox.hidden = true;
@@ -442,6 +477,7 @@ async function askAI() {
 
     const answer = data.result || "No response was returned.";
     resultBox.textContent = answer;
+    try { localStorage.removeItem(DRAFT_KEY); } catch (_) {}
 
     if (prompt) {
       conversationHistory.push({ role: "user", content: prompt });
