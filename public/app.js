@@ -86,7 +86,64 @@ if (narratorClose && narratorModal) {
   narratorClose.addEventListener("click", () => { narratorModal.hidden = true; });
 }
 
-const API_BASE = "https://freeapp-ai.lovesongmelodies.workers.dev";
+const GEMINI_MODEL = "gemini-2.5-flash";
+const GEMINI_KEY_STORAGE = "freeapp_ai_gemini_api_key_v1";
+const apiKeyInput = document.getElementById("gemini-api-key");
+const apiKeySaveButton = document.getElementById("gemini-key-save");
+const apiKeyClearButton = document.getElementById("gemini-key-clear");
+const apiKeyStatus = document.getElementById("gemini-key-status");
+if (apiKeyInput) apiKeyInput.value = localStorage.getItem(GEMINI_KEY_STORAGE) || "";
+if (localStorage.getItem("freeapp_ai_owner_key")) localStorage.removeItem("freeapp_ai_owner_key");
+if (apiKeySaveButton) apiKeySaveButton.addEventListener("click", () => {
+  const key = String(apiKeyInput?.value || "").trim();
+  if (!key) { if (apiKeyStatus) apiKeyStatus.textContent = "Paste your Gemini API key first."; return; }
+  localStorage.setItem(GEMINI_KEY_STORAGE, key);
+  if (apiKeyStatus) apiKeyStatus.textContent = "Gemini key saved on this device. Requests go directly to Google; the key is not sent to GitHub.";
+});
+if (apiKeyClearButton) apiKeyClearButton.addEventListener("click", () => {
+  localStorage.removeItem(GEMINI_KEY_STORAGE);
+  if (apiKeyInput) apiKeyInput.value = "";
+  if (apiKeyStatus) apiKeyStatus.textContent = "Gemini key cleared from this device.";
+});
+function getGeminiKey() {
+  const key = String(localStorage.getItem(GEMINI_KEY_STORAGE) || apiKeyInput?.value || "").trim();
+  if (!key) throw new Error("Set your Gemini API key in the three-dot menu before using AI features. Cloudflare has been removed.");
+  return key;
+}
+async function callGemini({ contents, systemInstruction, googleSearch = false, maxOutputTokens = 8192, temperature = 0.4, jsonMode = false }) {
+  const body = {
+    system_instruction: { parts: [{ text: String(systemInstruction || "You are FreeApp AI, a helpful research, reasoning, learning and coding assistant. Be accurate, transparent about uncertainty, and never claim actions you did not perform.") }] },
+    contents,
+    generationConfig: { temperature, maxOutputTokens }
+  };
+  if (googleSearch) body.tools = [{ google_search: {} }];
+  if (jsonMode) body.generationConfig.responseMimeType = "application/json";
+  const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + GEMINI_MODEL + ":generateContent?key=" + encodeURIComponent(getGeminiKey()), {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error((data?.error?.message || ("Google Gemini request failed (HTTP " + response.status + ".")) + (response.status === 400 ? " Check the key, API access, and model availability." : ""));
+  const candidate = data?.candidates?.[0];
+  const text = (candidate?.content?.parts || []).map(part => part.text || "").join("\n").trim();
+  if (!text) throw new Error("Gemini returned no text. Finish reason: " + (candidate?.finishReason || "unknown") + ".");
+  const grounding = candidate?.groundingMetadata?.groundingChunks || [];
+  const sources = grounding.map(chunk => chunk.web).filter(web => web?.uri).map(web => ({ title: web.title || web.uri, url: web.uri }));
+  return { text, sources, researched: sources.length > 0, raw: data };
+}
+function imagePart(dataUrl) {
+  const match = /^data:([^;,]+);base64,(.+)$/s.exec(String(dataUrl || ""));
+  if (!match) return null;
+  return { inline_data: { mime_type: match[1], data: match[2] } };
+}
+function historyContents(history) {
+  return (Array.isArray(history) ? history : []).slice(-12).filter(m => m && typeof m.content === "string" && m.content.trim()).map(m => ({
+    role: m.role === "assistant" || m.role === "model" ? "model" : "user",
+    parts: [{ text: m.content.slice(0, 5000) }]
+  }));
+}
+function parseJsonObject(text) {
+  try { return JSON.parse(String(text || "").trim()); } catch (_) { return null; }
+}
 
 imageInput.addEventListener("change", () => {
   selectedImages = Array.from(imageInput.files || []).slice(0, 4);
