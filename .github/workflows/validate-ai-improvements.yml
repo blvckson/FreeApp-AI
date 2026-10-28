@@ -4,7 +4,10 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [qwen-parity-improvements]
+    branches:
+      - qwen-parity-improvements
+      - remove-cloudflare-owner-self-modification
+      - fix/fast-replies-and-backend-removal
   workflow_dispatch:
 
 permissions:
@@ -21,7 +24,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Check JavaScript syntax
-        run: node --check worker.js
-      - name: Check package metadata
-        run: node -e "const p=require('./package.json'); if(!p.dependencies || !p.dependencies['@cloudflare/puppeteer']) process.exit(1); console.log('package metadata OK')"
+      - name: Check chat JavaScript syntax
+        run: node --check public/app.js
+      - name: Check voice app JavaScript syntax
+        run: node --check public/voice/app.js
