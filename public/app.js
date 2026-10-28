@@ -11,6 +11,38 @@ const buildButton = document.getElementById("build-button");
 const clearConversationButton = document.getElementById("clear-conversation-button");
 const conversationNote = document.getElementById("conversation-note");
 const HISTORY_KEY = "freeapp_ai_conversation_v1";
+const DRAFT_KEY = "freeapp_ai_unsent_draft_v1";
+let draftSaveTimer = null;
+function saveUnsentDraft() {
+  if (!promptBox) return;
+  try {
+    const value = String(promptBox.value || "");
+    if (value) localStorage.setItem(DRAFT_KEY, value.slice(0, 200000));
+    else localStorage.removeItem(DRAFT_KEY);
+  } catch (_) {
+    if (conversationNote) conversationNote.textContent = "Draft backup is unavailable on this device. Keep long messages copied until sent.";
+  }
+}
+function restoreUnsentDraft() {
+  try {
+    const saved = localStorage.getItem(DRAFT_KEY);
+    if (saved && promptBox && !promptBox.value) {
+      promptBox.value = saved;
+      if (conversationNote) conversationNote.textContent = "Recovered your unsent draft after the app restarted.";
+    }
+  } catch (_) {}
+}
+if (promptBox) {
+  restoreUnsentDraft();
+  promptBox.addEventListener("input", () => {
+    if (draftSaveTimer) clearTimeout(draftSaveTimer);
+    draftSaveTimer = setTimeout(saveUnsentDraft, 250);
+  });
+  window.addEventListener("pagehide", saveUnsentDraft);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") saveUnsentDraft();
+  });
+}
 const MEMORY_KEY = "freeapp_ai_memory_summary_v1";
 const MEMORY_TURN_COUNT_KEY = "freeapp_ai_memory_turn_count_v1";
 let persistentMemory = loadPersistentMemory();
@@ -442,6 +474,8 @@ async function askAI() {
 
     const answer = data.result || "No response was returned.";
     resultBox.textContent = answer;
+    try { localStorage.removeItem(DRAFT_KEY); } catch (_) {}
+    if (promptBox && promptBox.value.trim() === prompt) promptBox.value = "";
 
     if (prompt) {
       conversationHistory.push({ role: "user", content: prompt });
