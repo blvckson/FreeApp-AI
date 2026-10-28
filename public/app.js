@@ -231,14 +231,13 @@ if (phoneRunButton) phoneRunButton.addEventListener("click", async () => {
     phoneRunButton.disabled = true;
     phoneStatus.textContent = "Turning your request into a reviewable phone-action plan...";
     try {
-      const response = await fetch(API_BASE + "/api/phone-plan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ task: raw })
+      const planned = await callGemini({
+        systemInstruction: "Convert the user's ordinary phone task into a transparent, reviewable sequence for an Android accessibility helper. Return strict JSON only: {\\"summary\\":\\"...\\",\\"actions\\":[\\"one command per line\\"]}. Maximum 12 actions. Allowed commands: 'open Gmail' or 'open <installed app name>'; 'check system updates'; 'tap: <visible label>'; 'type: <ordinary non-sensitive text>'; 'scroll down'; 'scroll up'; 'back'; 'home'. Never invent labels, recipients, or values. Never type passwords, OTPs, security codes or payment-card details. Do not perform purchases, send messages, delete data, or change security settings without a separate user-confirmed action. This is a plan only.",
+        contents: [{ role: "user", parts: [{ text: "PHONE TASK TO PLAN:\\n" + raw }] }],
+        maxOutputTokens: 1000, temperature: 0.1, jsonMode: true
       });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || "Could not plan this phone task.");
-      if (!Array.isArray(data.actions) || !data.actions.length) throw new Error("No usable actions were planned. Add the exact visible button labels or break the task into smaller steps.");
+      const data = parseJsonObject(planned.text);
+      if (!data || !Array.isArray(data.actions) || !data.actions.length) throw new Error("No usable actions were planned. Add exact visible button labels or break the task into smaller steps.");
       phoneTaskInput.value = data.actions.join("\\n");
       phoneStatus.textContent = (data.summary || "Phone plan prepared.") + " Review the commands shown above. Nothing has been executed yet. Tap Run Phone Actions again to run the reviewed steps; consequential actions still require confirmation.";
     } catch (error) {
@@ -318,81 +317,26 @@ function parsePhoneAction(line) {
 async function runWebsiteTask() {
   const url = websiteUrlInput.value.trim();
   const task = websiteTaskInput.value.trim();
-  if (!url || !task) {
-    websiteStatus.textContent = "Enter a website address and describe the task.";
-    return;
-  }
-
+  if (!url || !task) { websiteStatus.textContent = "Enter a public website address and describe what you want researched."; return; }
   let parsed;
-  try { parsed = new URL(url); } catch (_) {
-    websiteStatus.textContent = "Enter a valid website address beginning with https://.";
-    return;
-  }
-  if (!["http:", "https:"].includes(parsed.protocol)) {
-    websiteStatus.textContent = "Only public HTTP or HTTPS websites are supported.";
-    return;
-  }
-
-  let ownerKey = localStorage.getItem("freeapp_ai_owner_key") || "";
-  if (!ownerKey) {
-    ownerKey = window.prompt("Enter your FreeApp AI owner key to authorize website actions:");
-    if (ownerKey) localStorage.setItem("freeapp_ai_owner_key", ownerKey);
-  }
-  if (!ownerKey) {
-    websiteStatus.textContent = "Website access was not authorized.";
-    return;
-  }
-
+  try { parsed = new URL(url); } catch (_) { websiteStatus.textContent = "Enter a valid website address beginning with https://."; return; }
+  if (!["http:", "https:"].includes(parsed.protocol)) { websiteStatus.textContent = "Only public HTTP or HTTPS websites are supported."; return; }
   websiteRunButton.disabled = true;
-  websiteStatus.textContent = "Opening the website in a temporary cloud browser...";
+  websiteStatus.textContent = "Researching the website directly with Gemini and Google Search. No cloud browser or website actions are used.";
   websiteResult.textContent = "";
   try {
-    const response = await fetch(API_BASE + "/api/browser-task", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-FreeApp-Admin-Key": ownerKey
-      },
-      body: JSON.stringify({ url: parsed.href, task })
+    const result = await callGemini({
+      systemInstruction: "You are FreeApp AI's public website research assistant. Use Google Search grounding when available. Research the supplied URL and user task, cite relevant sources as URLs, and be explicit if the page could not be accessed or verified. This is read-only research: do not claim to click, fill, submit, sign in, or change anything on a website.",
+      contents: [{ role: "user", parts: [{ text: "Website: " + parsed.href + "\nTask: " + task + "\nResearch public information about this page and complete the task as a read-only research response." }] }],
+      googleSearch: true, maxOutputTokens: 6000
     });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error((data.error || "Website task failed.") + (data.detail ? " " + data.detail : ""));
-
-    const lines = [
-      data.summary || "Website task finished.",
-      data.needsHuman ? ("Human assistance required: " + (data.verification || "verification")) : "",
-      "Page: " + (data.title || "(untitled)"),
-      "URL: " + (data.url || parsed.href),
-      "",
-      "Actions performed:"
-    ];
-    if (Array.isArray(data.actions) && data.actions.length) {
-      for (const item of data.actions) lines.push("- " + item.action + (item.selector ? " on " + item.selector : "") + (item.result ? " — " + item.result : ""));
-    } else {
-      lines.push("- Read-only inspection; no interaction was needed.");
-    }
-    lines.push("", "Visible page content:", data.pageText || "(No readable page text was returned.)", "", data.note || "");
-    websiteResult.replaceChildren();
-    websiteResult.textContent = lines.filter(Boolean).join("\n");
-    if (data.screenshot) {
-      const preview = document.createElement("img");
-      preview.className = "website-screenshot";
-      preview.alt = "Screenshot of the website after FreeApp AI's task";
-      preview.src = data.screenshot;
-      websiteResult.appendChild(document.createElement("br"));
-      websiteResult.appendChild(preview);
-    }
-    websiteStatus.textContent = data.needsHuman
-      ? "Paused: the website requires human verification or login. FreeApp AI did not bypass it."
-      : "Website task finished. Check the page content, screenshot, and action log above.";
+    websiteResult.textContent = result.text + (result.sources.length ? "\n\nSources:\n" + result.sources.map(s => "- " + s.title + ": " + s.url).join("\n") : "\n\nNo grounded web sources were returned.");
+    websiteStatus.textContent = result.researched ? "Website research finished with Google Search sources. No website actions were performed." : "Research finished, but Gemini returned no grounded source links.";
   } catch (error) {
-    websiteStatus.textContent = "Website task failed.";
-    websiteResult.textContent = error && error.message ? error.message : "The website task failed.";
-  } finally {
-    websiteRunButton.disabled = false;
-  }
+    websiteStatus.textContent = "Website research failed.";
+    websiteResult.textContent = error?.message || "The website research request failed.";
+  } finally { websiteRunButton.disabled = false; }
 }
-
 async function askAI() {
   const prompt = promptBox.value.trim();
   if (!prompt && !selectedImages.length) {
@@ -413,60 +357,15 @@ async function askAI() {
       images.push(await toDataUrl(file));
     }
 
-    const lower = prompt.toLowerCase();
-    // Route explicit app/code change requests to the owner-authorized
-    // self-modification pipeline even when the command is not phrased as
-    // "modify yourself".
-    const selfModify = isSelfModificationCommand(lower);
-
-    if (selfModify) {
-      let ownerKey = localStorage.getItem("freeapp_ai_owner_key") || "";
-      if (!ownerKey) {
-        ownerKey = window.prompt("Enter your FreeApp AI owner key:");
-        if (ownerKey) localStorage.setItem("freeapp_ai_owner_key", ownerKey);
-      }
-      if (!ownerKey) throw new Error("Owner key is required for self-modification.");
-
-      statusBox.textContent = "Owner command accepted — preparing the code change...";
-      const response = await fetch(API_BASE + "/api/self-modify", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-FreeApp-Admin-Key": ownerKey
-        },
-        body: JSON.stringify({ command: prompt })
-      });
-
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || "Self-modification failed.");
-
-      resultBox.textContent =
-        (data.summary || "Self-modification completed.") +
-        (Array.isArray(data.files) && data.files.length
-          ? "\n\nChanged: " + data.files.map(f => f.path).join(", ")
-          : "") +
-        (Array.isArray(data.notes) && data.notes.length
-          ? "\n\nNotes:\n- " + data.notes.join("\n- ")
-          : "");
-
-      statusBox.textContent = data.changed
-        ? "Change committed to GitHub. The build/deploy workflow can now run."
-        : "No code change was necessary.";
-      return;
-    }
-
-    const response = await fetch(API_BASE + "/api/generate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt, images, history: conversationHistory.slice(-12), memorySummary: persistentMemory })
+    const contents = historyContents(conversationHistory);
+    const userParts = [{ text: prompt + (persistentMemory ? "\n\nRelevant saved context from this device (use only if applicable):\n" + persistentMemory : "") }];
+    for (const dataUrl of images) { const part = imagePart(dataUrl); if (part) userParts.push(part); }
+    contents.push({ role: "user", parts: userParts });
+    const result = await callGemini({
+      systemInstruction: "You are FreeApp AI: a highly capable, warm, emotionally intelligent research, reasoning, learning, and software-building assistant. Follow the user's request carefully, preserve topic continuity, explain assumptions and uncertainty, and never claim that code was changed, an app was built, a website was operated, or research was verified unless it happened. For current facts, use Google Search grounding and cite sources. For screenshots, inspect the provided images. Give complete, testable code when requested. Do not modify this app or its source code automatically; explain proposed code changes instead.",
+      contents, googleSearch: true, maxOutputTokens: 8192, temperature: 0.4
     });
-
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      const detail = data.detail ? " " + data.detail : "";
-      throw new Error((data.error || "The AI service returned an error.") + detail);
-    }
-
+    const data = { result: result.text, sources: result.sources, researched: result.researched };
     const answer = data.result || "No response was returned.";
     resultBox.textContent = answer;
 
@@ -550,12 +449,6 @@ function renderMedia(media) {
   }
 }
 
-function isSelfModificationCommand(lower) {
-  const action = /\b(make|add|change|modify|update|upgrade|improve|fix|repair|remove|delete|replace|rewrite|redesign|build|create|implement|enable|disable)\b/.test(lower);
-  const target = /\b(app|application|project|code|source|feature|functionality|interface|ui|button|screen|narrator|voice|voice clone|self|freeapp|freeapp ai|personality|emotional intelligence|emotions|consciousness|memory|topic continuity|conversation history|reasoning|answer depth|detailed answers)\b/.test(lower);
-  const explicitSelf = /\b(modify yourself|upgrade yourself|fix yourself|change yourself|improve yourself|add yourself|update yourself)\b/.test(lower);
-  return explicitSelf || (action && target);
-}
 
 function loadPersistentMemory() {
   try { return String(localStorage.getItem(MEMORY_KEY) || "").slice(0, 3500); }
@@ -571,20 +464,15 @@ async function updatePersistentMemory(prompt) {
   const explicit = /\b(remember|save this|keep in mind|don't forget|do not forget|store this)\b/i.test(prompt || "");
   if (!explicit && turnCount % 4 !== 0) return;
   try {
-    const response = await fetch(API_BASE + "/api/memory-summary", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        history: conversationHistory.slice(-16),
-        previousSummary: persistentMemory
-      })
+    const result = await callGemini({
+      systemInstruction: "Maintain a concise, user-controlled assistant memory summary. Extract useful stable preferences, ongoing projects, explicit constraints, device/workflow facts, and unresolved next steps. Exclude passwords, API keys, private keys, authentication codes, financial details, highly sensitive personal data, and speculative inferences. Return only the updated memory summary in plain text, maximum 1800 characters.",
+      contents: [{ role: "user", parts: [{ text: "PREVIOUS MEMORY SUMMARY:\n" + (persistentMemory || "(none)") + "\n\nRECENT CONVERSATION:\n" + conversationHistory.slice(-16).map(m => m.role.toUpperCase() + ": " + m.content).join("\n\n").slice(0, 12000) }] }],
+      maxOutputTokens: 700, temperature: 0.1
     });
-    const data = await response.json().catch(() => ({}));
-    if (response.ok && data.updated && typeof data.summary === "string" && data.summary.trim()) {
-      persistentMemory = data.summary.trim().slice(0, 3500);
+    if (result.text.trim()) {
+      persistentMemory = result.text.trim().slice(0, 3500);
       try { localStorage.setItem(MEMORY_KEY, persistentMemory); } catch (_) {}
-      if (conversationNote) conversationNote.textContent =
-        "Conversation context and useful project/preferences memory are saved on this device. Clear both any time.";
+      if (conversationNote) conversationNote.textContent = "Conversation context and useful project/preferences memory are saved on this device. Clear both any time.";
     }
   } catch (_) {
     // Memory is an enhancement, not a dependency: chat continues if summarisation is unavailable.
