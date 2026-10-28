@@ -17,7 +17,7 @@
         <button id="menu-toggle" class="menu-toggle" type="button" aria-label="Open all functions" aria-expanded="false" aria-controls="function-menu">⋮</button>
       </div>
       </header>
-    <nav id="function-menu" class="function-menu" hidden aria-label="All FreeApp AI functions"><div class="function-menu-heading"><strong>All functions</strong><button id="menu-close" class="menu-close" type="button" aria-label="Close functions">×</button></div><p class="small">Open a function below. Your main typing area and AI response remain visible.</p><div id="function-menu-content"><div class="narrator-buttons"><button id="builtin-narrator-button" class="icon-button" type="button">🔊 Built-in Narrator</button><button id="narrator-settings-button" class="icon-button" type="button" aria-label="Voice clone narrator">🎙 Voice Clone Narrator</button></div></div></nav>
+    <nav id="function-menu" class="function-menu" hidden aria-label="All FreeApp AI functions"><div class="function-menu-heading"><strong>All functions</strong><button id="menu-close" class="menu-close" type="button" aria-label="Close functions">×</button></div><p class="small">Open a function below. Your main typing area and AI response remain visible.</p><div id="function-menu-content"><div class="narrator-buttons"><button id="builtin-narrator-button" class="icon-button" type="button">🔊 Built-in Narrator</button><button id="narrator-settings-button" class="icon-button" type="button" aria-label="Voice clone narrator">🎙 Voice Clone Narrator</button></div><section class="card provider-card"><h2>AI Provider Setup</h2><p class="small">FreeApp AI now connects directly to Google Gemini. A Gemini API key is required because Cloudflare hosting has been removed. The key is stored only in this app on this device; do not share it or publish it.</p><label for="gemini-api-key">Gemini API key</label><input id="gemini-api-key" type="password" autocomplete="off" placeholder="Paste your Gemini API key"><div class="controls"><button id="gemini-key-save" type="button">Save Gemini Key</button><button id="gemini-key-clear" class="secondary-button" type="button">Clear Key</button></div><p id="gemini-key-status" class="small" aria-live="polite">Your key is not sent to GitHub.</p></section></div></nav>
     <section class="card">
       <label for="prompt">Ask FreeApp AI anything</label>
       <textarea id="prompt" rows="8" placeholder="Ask a complex question or attach a screenshot..."></textarea>
@@ -42,13 +42,13 @@
     </section>
     <section class="card website-card">
       <h2>Website & Online App Access</h2>
-      <p>Ask FreeApp AI to inspect a public website, follow links, fill fields, select options, and use visible page controls.</p>
+      <p>Ask FreeApp AI to research a public website and summarise available information.</p>
       <label for="website-url">Website address</label>
       <input id="website-url" type="url" placeholder="https://example.com" autocomplete="url">
       <label for="website-task">What should FreeApp AI do there?</label>
       <textarea id="website-task" rows="4" placeholder="Example: Read the page and summarise the main points, or fill this public contact form with the message I provide."></textarea>
-      <p class="small">FreeApp AI can inspect pages and perform multi-step actions, re-checking the page as it changes. It detects login and human-verification challenges and pauses rather than bypassing them. Do not paste passwords, one-time codes, cookies, or secret keys. Cloud browser sessions are temporary; persistent authorized logins, Tor access, and control of apps installed on your phone are not enabled yet.</p>
-      <button id="website-run-button" type="button">Open Website & Perform Task</button>
+      <p class="small">Website access is read-only research through Google Search. This build does not open a cloud browser or click, fill, submit, or sign in to websites. Do not paste passwords, one-time codes, cookies, or secret keys.</p>
+      <button id="website-run-button" type="button">Research Website</button>
       <div id="website-status" class="status" aria-live="polite"></div>
       <div id="website-result" class="website-result" aria-live="polite"></div>
     </section>
