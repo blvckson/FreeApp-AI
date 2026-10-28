@@ -343,6 +343,22 @@ async function askAI() {
     return;
   }
 
+  // Instant local handling for greetings: never wait for a remote model just
+  // to answer "hi", "hello", or "hey". Keep this path offline-capable.
+  if (prompt && !selectedImages.length && /^(hi|hello|hey|hiya|good morning|good afternoon|good evening)[!.?\s]*$/i.test(prompt)) {
+    const answer = "Hi! I'm FreeApp AI. I'm here and ready to help. What would you like to work on?";
+    resultBox.textContent = answer;
+    mediaBox.replaceChildren();
+    sourceList.replaceChildren();
+    sourcesBox.hidden = true;
+    conversationHistory.push({ role: "user", content: prompt });
+    conversationHistory.push({ role: "assistant", content: answer });
+    conversationHistory = conversationHistory.slice(-16);
+    saveConversationHistory();
+    statusBox.textContent = "Ready — instant reply (no network request).";
+    return;
+  }
+
   buildButton.disabled = true;
   statusBox.textContent = "FreeApp AI is processing your request...";
   resultBox.textContent = "";
@@ -398,11 +414,25 @@ async function askAI() {
       return;
     }
 
-    const response = await fetch(API_BASE + "/api/generate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt, images, history: conversationHistory.slice(-12), memorySummary: persistentMemory })
-    });
+    // Bound the wait so a stalled backend cannot leave the user waiting forever.
+    const requestController = new AbortController();
+    const requestTimeout = setTimeout(() => requestController.abort(), 25000);
+    let response;
+    try {
+      response = await fetch(API_BASE + "/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt, images, history: conversationHistory.slice(-12), memorySummary: persistentMemory }),
+        signal: requestController.signal
+      });
+    } catch (error) {
+      if (error && error.name === "AbortError") {
+        throw new Error("The AI service took longer than 25 seconds. Please retry; the app stopped waiting instead of hanging.");
+      }
+      throw error;
+    } finally {
+      clearTimeout(requestTimeout);
+    }
 
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
