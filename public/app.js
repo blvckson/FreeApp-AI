@@ -232,8 +232,8 @@ if (phoneRunButton) phoneRunButton.addEventListener("click", async () => {
     phoneStatus.textContent = "Turning your request into a reviewable phone-action plan...";
     try {
       const planned = await callGemini({
-        systemInstruction: "Convert the user's ordinary phone task into a transparent, reviewable sequence for an Android accessibility helper. Return strict JSON only: {\\"summary\\":\\"...\\",\\"actions\\":[\\"one command per line\\"]}. Maximum 12 actions. Allowed commands: 'open Gmail' or 'open <installed app name>'; 'check system updates'; 'tap: <visible label>'; 'type: <ordinary non-sensitive text>'; 'scroll down'; 'scroll up'; 'back'; 'home'. Never invent labels, recipients, or values. Never type passwords, OTPs, security codes or payment-card details. Do not perform purchases, send messages, delete data, or change security settings without a separate user-confirmed action. This is a plan only.",
-        contents: [{ role: "user", parts: [{ text: "PHONE TASK TO PLAN:\\n" + raw }] }],
+        systemInstruction: `Convert an ordinary phone task into a transparent, reviewable sequence for an Android accessibility helper. Return strict JSON only: {"summary":"...","actions":["one command per line"]}. Maximum 12 actions. Allowed commands: open Gmail or open <installed app name>; check system updates; tap: <visible label>; type: <ordinary non-sensitive text>; scroll down; scroll up; back; home. Never invent labels, recipients, or values. Never type passwords, OTPs, security codes or payment-card details. Do not perform purchases, send messages, delete data, or change security settings without a separate user-confirmed action. This is a plan only.`,
+        contents: [{ role: "user", parts: [{ text: "PHONE TASK TO PLAN:\n" + raw }] }],
         maxOutputTokens: 1000, temperature: 0.1, jsonMode: true
       });
       const data = parseJsonObject(planned.text);
