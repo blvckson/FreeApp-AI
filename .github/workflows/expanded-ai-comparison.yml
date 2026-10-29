@@ -105,7 +105,7 @@ jobs:
           def gemini_latest_api_call(prompt):
               key=os.environ.get("GEMINI_API_KEY","").strip()
               if not key: raise RuntimeError("Official Gemini API not tested: GEMINI_API_KEY secret is not configured; public Gemini chat is not an anonymous API.")
-              url="https://generativelanguage.googleapis.com/v1beta/models/gemini-4-argon:generateContent?key="+key
+              url="https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key="+key
               payload={"contents":[{"parts":[{"text":prompt}]}],"generationConfig":{"temperature":0.2,"maxOutputTokens":1800}}
               return request_json(url,payload,timeout=60)
 
@@ -156,9 +156,9 @@ jobs:
             "LLM7 anonymous":lambda p:llm7_call(p),
             "Qwen via anonymous OVH endpoint":lambda p:qwen_anonymous_call(p),
             "OpenAI GPT-6 Astra API (not ChatGPT Free app)":lambda p:openai_latest_api_call(p),
-            "Google Gemini 4 Argon API":lambda p:gemini_latest_api_call(p)
+            "Google Gemini 3.8 Flash API (free-tier eligible)":lambda p:gemini_latest_api_call(p)
           }
-          results={"created_at":datetime.now(timezone.utc).isoformat(),"method":"same prompts; automated checklist only; not a standardized commercial benchmark","access_notes":{"Gemini_official":"Uses the official Gemini 4 Argon API with repository secret GEMINI_API_KEY_2; no key is created or purchased by this workflow.","OpenAI_official_and_ChatGPT":"Uses official GPT-6 Astra API only if OPENAI_API_KEY is configured as a GitHub Actions secret. GPT-6 Astra is OpenAI’s current flagship API model; ChatGPT web/app is not a public anonymous API.","No_credentials":"If either secret is absent, that provider will be marked unavailable and no login, card, or payment will be attempted.","Qwen":"Tested through an anonymous OVH-hosted Qwen model endpoint, not Alibaba/Qwen official API."},"tasks":[],"providers":{}}
+          results={"created_at":datetime.now(timezone.utc).isoformat(),"method":"same prompts; automated checklist only; not a standardized commercial benchmark","access_notes":{"Gemini_official":"Uses the official Gemini 3.8 Flash API with repository secret GEMINI_API_KEY_2; free-tier access and rate limits depend on Google account/project.; no key is created or purchased by this workflow.","OpenAI_official_and_ChatGPT":"Uses official GPT-6 Astra API only if OPENAI_API_KEY is configured as a GitHub Actions secret. GPT-6 Astra is OpenAI’s current flagship API model; ChatGPT web/app is not a public anonymous API.","No_credentials":"If either secret is absent, that provider will be marked unavailable and no login, card, or payment will be attempted.","Qwen":"Tested through an anonymous OVH-hosted Qwen model endpoint, not Alibaba/Qwen official API."},"tasks":[],"providers":{}}
           totals={name:[] for name in providers}
           latencies={name:[] for name in providers}
           for task in tasks:
