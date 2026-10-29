@@ -17,7 +17,7 @@ function saveUnsentDraft() {
   if (!promptBox) return;
   try {
     const value = String(promptBox.value || "");
-    if (value) localStorage.setItem(DRAFT_KEY, value.slice(0, 200000));
+    if (value) localStorage.setItem(DRAFT_KEY, value.slice(0, 120000));
     else localStorage.removeItem(DRAFT_KEY);
   } catch (_) {
     if (conversationNote) conversationNote.textContent = "Draft backup is unavailable on this device. Keep long messages copied until sent.";
@@ -36,7 +36,7 @@ if (promptBox) {
   restoreUnsentDraft();
   promptBox.addEventListener("input", () => {
     if (draftSaveTimer) clearTimeout(draftSaveTimer);
-    draftSaveTimer = setTimeout(saveUnsentDraft, 250);
+    draftSaveTimer = setTimeout(saveUnsentDraft, 750);
   });
   window.addEventListener("pagehide", saveUnsentDraft);
   document.addEventListener("visibilitychange", () => {
