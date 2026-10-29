@@ -141,3 +141,5 @@ jobs:
           path: comparison-results/expanded-comparison.json
           if-no-files-found: warn
           retention-days: 30
+
+# Trigger a run after the workflow file is registered on the default branch.
