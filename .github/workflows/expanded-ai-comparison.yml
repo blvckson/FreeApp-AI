@@ -18,6 +18,7 @@ jobs:
         env:
           FREEAPP_URL: https://freeapp-ai.lovesongmelodies.workers.dev/api/generate
           LLM7_URL: https://api.llm7.io/v1/chat/completions
+          QWEN_URL: https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/chat/completions
         run: |
           python - <<'PY'
           import json, os, re, time, urllib.request, urllib.error, statistics
@@ -69,6 +70,10 @@ jobs:
           def llm7_call(prompt):
               return request_json(os.environ["LLM7_URL"],{"model":"default","messages":[{"role":"user","content":prompt}],"temperature":0.2,"max_tokens":1800})
 
+          def qwen_anonymous_call(prompt):
+              # Anonymous public OVH endpoint; model is Qwen-hosted by OVH, not Alibaba's official API.
+              return request_json(os.environ["QWEN_URL"],{"model":"Qwen3.8-27B","messages":[{"role":"user","content":prompt}],"temperature":0.2,"max_tokens":1800})
+
           def extract_text(obj):
               if isinstance(obj,str): return obj
               if isinstance(obj,dict):
@@ -107,9 +112,10 @@ jobs:
 
           providers={
             "FreeApp-AI":lambda p:freeapp_call(p),
-            "LLM7 anonymous":lambda p:llm7_call(p)
+            "LLM7 anonymous":lambda p:llm7_call(p),
+            "Qwen via anonymous OVH endpoint":lambda p:qwen_anonymous_call(p)
           }
-          results={"created_at":datetime.now(timezone.utc).isoformat(),"method":"same prompts; automated checklist only; not a standardized commercial benchmark","tasks":[],"providers":{}}
+          results={"created_at":datetime.now(timezone.utc).isoformat(),"method":"same prompts; automated checklist only; not a standardized commercial benchmark","access_notes":{"Gemini_official":"Not called: Google Gemini API requires an API key; no user key/account access is available for this run.","OpenAI_official_and_ChatGPT":"Not called: official OpenAI API requires authenticated access; ChatGPT web/app is not a public anonymous API.","Qwen":"Tested through an anonymous OVH-hosted Qwen model endpoint, not Alibaba/Qwen official API."},"tasks":[],"providers":{}}
           totals={name:[] for name in providers}
           latencies={name:[] for name in providers}
           for task in tasks:
