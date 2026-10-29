@@ -707,14 +707,6 @@ async function runChatModel(env, messages, options = {}) {
       }
     }
   }
-  for (const provider of anonymousProviders) {
-    try {
-      return await runAnonymousOpenAIProvider(provider, settings);
-    } catch (error) {
-      providerErrors.push(provider.name + ": " + String(error?.message || error).slice(0, 140));
-    }
-  }
-
   // Pollinations currently documents key-based generation. We probe its
   // anonymous compatibility endpoint only as a final best-effort fallback;
   // if it rejects anonymous calls, continue to the configured Cloudflare AI.
