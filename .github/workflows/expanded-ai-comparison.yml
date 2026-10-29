@@ -86,7 +86,7 @@ jobs:
           def openai_latest_api_call(prompt):
               key=os.environ.get("OPENAI_API_KEY","").strip()
               if not key: raise RuntimeError("Official OpenAI API not tested: OPENAI_API_KEY secret is not configured; ChatGPT web access is not an anonymous API.")
-              return request_json("https://api.openai.com/v1/chat/completions",{"model":"gpt-6-astra","messages":[{"role":"user","content":prompt}],"temperature":0.2,"max_tokens":1800},{"Authorization":"Bearer "+key},timeout=60)
+              return request_json("https://api.openai.com/v1/chat/completions",{"model":"gpt-6-astra","messages":[{"role":"user","content":prompt}],"max_completion_tokens":1800},{"Authorization":"Bearer "+key},timeout=60)
 
           def gemini_latest_api_call(prompt):
               key=os.environ.get("GEMINI_API_KEY","").strip()
