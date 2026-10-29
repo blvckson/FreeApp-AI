@@ -985,12 +985,15 @@ async function fetchPage(item) {
 }
 
 function extractText(html) {
-  const withoutBlocks = html.replace(
-    new RegExp("<(?:script|style|noscript|svg)\b[\s\\S]*?</(?:script|style|noscript|svg)>", "gi"),
-    " "
-  );
-  return decodeHtml(withoutBlocks.replace(new RegExp("<[^>]+>", "g"), " "))
-    .replace(/\s+/g, " ")
+  // Strip executable/style blocks before removing markup. Use regex literals so
+  // \\b remains a regex word boundary (a string "\\b" becomes a backspace).
+  const withoutBlocks = String(html || "")
+    .replace(/<!--[\\s\\S]*?-->/g, " ")
+    .replace(/<(script|style|noscript|svg|template)\\b[^>]*>[\\s\\S]*?<\\/\\1\\s*>/gi, " ")
+    .replace(/<(iframe|object)\\b[^>]*>[\\s\\S]*?<\\/\\1\\s*>/gi, " ");
+  return decodeHtml(withoutBlocks.replace(/<[^>]+>/g, " "))
+    .replace(/[\\t\\r\\n\\f]+/g, " ")
+    .replace(/\\s{2,}/g, " ")
     .trim();
 }
 
