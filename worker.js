@@ -666,35 +666,47 @@ async function runChatModel(env, messages, options = {}) {
   };
 
   const providerErrors = [];
-  // Keep Gemini when its quota is available, but do not let a Gemini quota
-  // failure prevent free anonymous providers from answering the request.
+  // Try the documented anonymous-free Kilo auto router first. The old hard-coded
+  // MiniMax model ID was removed from Kilo's live catalog and always returned 404.
+  // Kilo's kilo-auto/free route selects an available free model dynamically.
+  const anonymousProviders = [
+    { name: "Kilo Free", url: "https://ai-gateway.kilo.ai/api/v1/chat/completions", model: "kilo-auto/free", timeoutMs: 18000 },
+    { name: "LLM7", url: "https://api.llm7.io/v1/chat/completions", model: "default", timeoutMs: 12000 }
+  ];
+  for (const provider of anonymousProviders) {
+    try {
+      return await runAnonymousOpenAIProvider(provider, settings);
+    } catch (error) {
+      providerErrors.push(provider.name + ": " + String(error?.message || error).slice(0, 140));
+    }
+  }
+
+  // Gemini is attempted only after anonymous free routes. Quota-exhaustion errors
+  // are not retried against a second Gemini model because both share the same key.
   if (env.GEMINI_API_KEY) {
     const primaryModel = String(env.GEMINI_MODEL || "gemini-3.8-flash").trim();
     const fallbackModel = String(env.GEMINI_FALLBACK_MODEL || "gemini-3.5-flash-lite").trim();
     try {
-      return await runGeminiModel(env, settings, { model: primaryModel, timeoutMs: 18000 });
+      return await runGeminiModel(env, settings, { model: primaryModel, timeoutMs: 12000 });
     } catch (primaryError) {
-      providerErrors.push("Gemini primary: " + String(primaryError?.message || primaryError).slice(0, 140));
-      if (fallbackModel && fallbackModel !== primaryModel) {
+      const detail = String(primaryError?.message || primaryError);
+      providerErrors.push("Gemini primary: " + detail.slice(0, 140));
+      const quotaExhausted = /HTTP 429|RESOURCE_EXHAUSTED|quota|rate.?limit/i.test(detail);
+      if (!quotaExhausted && fallbackModel && fallbackModel !== primaryModel) {
         try {
           return await runGeminiModel(env, {
             ...settings,
             max_tokens: Math.min(settings.max_tokens || 4096, 5000),
             temperature: Math.min(settings.temperature ?? 0.2, 0.2)
-          }, { model: fallbackModel, timeoutMs: 12000 });
+          }, { model: fallbackModel, timeoutMs: 10000 });
         } catch (fallbackError) {
           providerErrors.push("Gemini fallback: " + String(fallbackError?.message || fallbackError).slice(0, 140));
         }
+      } else if (quotaExhausted) {
+        providerErrors.push("Gemini fallback skipped: the API key quota/rate limit is exhausted.");
       }
     }
   }
-
-  // Anonymous OpenAI-compatible providers: no user API key is embedded in
-  // the app. Their public free access can be rate-limited or withdrawn.
-  const anonymousProviders = [
-    { name: "LLM7", url: "https://api.llm7.io/v1/chat/completions", model: "default", timeoutMs: 25000 },
-    { name: "Kilo", url: "https://ai-gateway.kilo.ai/api/v1/chat/completions", model: "minimax/minimax-m2.1:free", timeoutMs: 25000 }
-  ];
   for (const provider of anonymousProviders) {
     try {
       return await runAnonymousOpenAIProvider(provider, settings);
@@ -714,16 +726,28 @@ async function runChatModel(env, messages, options = {}) {
 
   if (env.AI) {
     try {
-      return await env.AI.run(env.FREEAPP_AI_MODEL || DEFAULT_MODEL, settings);
+      return await Promise.race([
+        env.AI.run(env.FREEAPP_AI_MODEL || DEFAULT_MODEL, settings),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Cloudflare AI request timed out.")), 10000))
+      ]);
     } catch (primaryError) {
-      providerErrors.push("Cloudflare AI primary: " + String(primaryError?.message || primaryError).slice(0, 140));
-      try {
-        return await env.AI.run(FALLBACK_MODEL, {
-          ...settings,
-          temperature: Math.min(settings.temperature, 0.2)
-        });
-      } catch (fallbackError) {
-        providerErrors.push("Cloudflare AI fallback: " + String(fallbackError?.message || fallbackError).slice(0, 140));
+      const detail = String(primaryError?.message || primaryError);
+      providerErrors.push("Cloudflare AI primary: " + detail.slice(0, 140));
+      const quotaExhausted = /4006|daily free allocation|quota exceeded|resource.?exhausted/i.test(detail);
+      if (!quotaExhausted) {
+        try {
+          return await Promise.race([
+            env.AI.run(FALLBACK_MODEL, {
+              ...settings,
+              temperature: Math.min(settings.temperature, 0.2)
+            }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error("Cloudflare AI fallback timed out.")), 8000))
+          ]);
+        } catch (fallbackError) {
+          providerErrors.push("Cloudflare AI fallback: " + String(fallbackError?.message || fallbackError).slice(0, 140));
+        }
+      } else {
+        providerErrors.push("Cloudflare AI fallback skipped: daily allocation is exhausted.");
       }
     }
   }
