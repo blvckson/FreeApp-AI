@@ -58,8 +58,22 @@ jobs:
           def request_json(url, payload, headers=None, timeout=35):
               data=json.dumps(payload).encode()
               req=urllib.request.Request(url, data=data, headers={"Content-Type":"application/json","Accept":"application/json","User-Agent":"Mozilla/5.0 (compatible; FreeApp-AI-Benchmark/1.0)", **(headers or {})}, method="POST")
-              with urllib.request.urlopen(req, timeout=timeout) as resp:
-                  return json.loads(resp.read().decode())
+              try:
+                  with urllib.request.urlopen(req, timeout=timeout) as resp:
+                      return json.loads(resp.read().decode())
+              except urllib.error.HTTPError as e:
+                  # Preserve provider error codes so quota exhaustion is not confused with a model-quality failure.
+                  raw=e.read().decode("utf-8", errors="replace")
+                  try:
+                      body=json.loads(raw)
+                  except Exception:
+                      body={"message":raw[:500]}
+                  err=body.get("error",body) if isinstance(body,dict) else {"message":str(body)}
+                  if not isinstance(err,dict): err={"message":str(err)}
+                  code=err.get("code") or err.get("status") or "unknown"
+                  message=err.get("message") or err.get("detail") or raw[:500] or str(e)
+                  retry_after=e.headers.get("Retry-After")
+                  raise RuntimeError(f"HTTP {e.code}; provider_code={code}; message={message}; retry_after={retry_after}; url={url}") from None
 
           def freeapp_call(prompt):
               # Match the known-good live benchmark request contract first.
@@ -163,10 +177,12 @@ jobs:
               results["tasks"].append(row)
           for name in providers:
               scores=totals[name]
-              results["providers"][name]={"tasks_completed":len(scores),"tasks_total":len(tasks),"mean_heuristic_score":round(statistics.mean(scores),1) if scores else None,"mean_latency_seconds":round(statistics.mean(latencies[name]),3) if latencies[name] else None,"category_scores":{r["task"]:r["providers"].get(name,{}).get("score") for r in results["tasks"]}}
+              completed=len(scores)
+              mean_score=round(statistics.mean(scores),1) if scores else None
+              results["providers"][name]={"tasks_completed":completed,"tasks_total":len(tasks),"coverage_percent":round(100*completed/len(tasks),1),"mean_heuristic_score_on_completed_tasks":mean_score,"coverage_adjusted_score":round(mean_score*completed/len(tasks),1) if mean_score is not None else 0,"mean_latency_seconds":round(statistics.mean(latencies[name]),3) if latencies[name] else None,"category_scores":{r["task"]:r["providers"].get(name,{}).get("score") for r in results["tasks"]},"interpretation":"Checklist score is heuristic, not correctness; unavailable tasks count as missing coverage, not wrong answers."}
           os.makedirs("comparison-results",exist_ok=True)
           with open("comparison-results/expanded-comparison.json","w") as f: json.dump(results,f,indent=2,ensure_ascii=False)
-          print(json.dumps({"providers":results["providers"],"tasks":[{"task":r["task"],"providers":{n:{"status":v.get("status"),"error":v.get("error"),"score":v.get("score")} for n,v in r["providers"].items()}} for r in results["tasks"]]},indent=2))
+          print(json.dumps({"comparison_warning":"Do not rank providers with incomplete coverage by mean score alone. HTTP 429 is an access/quota/rate-limit failure, not a model-quality score.","providers":results["providers"],"tasks":[{"task":r["task"],"providers":{n:{"status":v.get("status"),"error":v.get("error"),"score":v.get("score")} for n,v in r["providers"].items()}} for r in results["tasks"]]},indent=2))
           PY
       - name: Upload full comparison results
         if: always()
