@@ -127,7 +127,7 @@ jobs:
               Path("proposed.patch").write_text("")
               Path("repair-report.md").write_text("# Autonomous repair result\n\nThe model did not return an applicable patch. No source files were changed.\n")
           else:
-              patch = answer[start:].strip()
+              patch = answer[start:].split("\\n```", 1)[0].strip()
               if patch.startswith("--- a/") and "diff --git " not in patch:
                   # git apply accepts unified diffs with ---/+++ headers.
                   pass
