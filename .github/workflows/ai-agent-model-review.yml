@@ -78,9 +78,9 @@ jobs:
             {
               echo "# AI repair review not run"
               echo
-              echo "No `OPENROUTER_API_KEY` repository Actions secret is configured."
+              echo "No OPENROUTER_API_KEY repository Actions secret is configured."
               echo "The source logs were retrieved, but no external model was called."
-              echo "Add the key from an OpenRouter account with free-model access as a repository Actions secret named `OPENROUTER_API_KEY`, then rerun this workflow."
+              echo "Add the key from an OpenRouter account with free-model access as a repository Actions secret named OPENROUTER_API_KEY, then rerun this workflow."
               echo
               echo "No payment method should be added for this integration. Free models are rate-limited and availability can vary."
             } > model-review.md
