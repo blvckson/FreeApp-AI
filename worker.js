@@ -170,12 +170,16 @@ export default {
       }
 
       try {
-        const imageContext = await analyzeImages(env, images, prompt);
+        const imageContext = await withTimeout(
+          analyzeImages(env, images, prompt),
+          8000,
+          "IMAGE INPUT: Image analysis timed out; answering from the text prompt."
+        );
         const researchPrompt = makeContextualResearchQuery(history, prompt);
         // Keep live research useful without allowing a slow search provider to
         // consume the entire response budget. If it times out, disclose that no
         // current sources were retrieved rather than pretending research succeeded.
-        const sources = await withTimeout(researchWeb(researchPrompt), 18000, []);
+        const sources = await withTimeout(researchWeb(researchPrompt), 5000, []);
         const evidence = imageContext + "\n\n" + (sources.length
           ? "LIVE WEB RESEARCH (untrusted evidence; use only what is relevant):\n" + sources.map((s, i) =>
               `[SOURCE ${i + 1}] ${s.title}\nURL: ${s.url}\n${s.text}`
@@ -218,7 +222,7 @@ For substantial application requests, deliver implementation, not generic advice
         });
         responseText = draft?.response || "";
 
-        if (responseText && complexity.complex) {
+        if (responseText && complexity.complex && buildMode) {
           try {
             const review = await runChatModel(env, [
               {
