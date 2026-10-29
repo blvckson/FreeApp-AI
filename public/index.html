@@ -52,6 +52,23 @@
       <div id="website-status" class="status" aria-live="polite"></div>
       <div id="website-result" class="website-result" aria-live="polite"></div>
     </section>
+    <section class="card github-coder-card" id="github-coder-card">
+      <h2>GitHub Coding Agent</h2>
+      <p>Ask FreeApp AI to inspect a repository, write real source changes, create a working branch, and open a pull request for review.</p>
+      <label for="github-repo">GitHub repository (owner/name)</label>
+      <input id="github-repo" type="text" placeholder="your-account/your-repository" autocomplete="off">
+      <label for="github-token">GitHub access token</label>
+      <input id="github-token" type="password" placeholder="Paste a fine-grained token for this repository" autocomplete="off">
+      <p class="small">Use a fine-grained token limited to the chosen repository with Contents: Read and write and Pull requests: Read and write. Token is used only in this screen and is not sent to FreeApp AI/Cloudflare. It is not saved between sessions. Never paste a password or token into the normal AI chat.</p>
+      <label for="github-coding-task">What should FreeApp AI code?</label>
+      <textarea id="github-coding-task" rows="5" placeholder="Example: Fix the login crash, add tests, and preserve all existing features."></textarea>
+      <div class="controls">
+        <button id="github-coding-run" type="button">Code Repository & Open Pull Request</button>
+        <button id="github-coding-clear" class="secondary-button" type="button">Clear Token</button>
+      </div>
+      <div id="github-coding-status" class="status" aria-live="polite">No repository changes are made until you run a coding task. Changes are proposed on a new branch, not directly on the default branch.</div>
+      <div id="github-coding-result" class="website-result" aria-live="polite"></div>
+    </section>
     <section class="card phone-control-card">
       <h2>Phone Control (Android)</h2>
       <p>FreeApp AI can open supported apps and perform visible screen actions after you enable its accessibility service. Enable it yourself in Android settings and keep the phone unlocked while actions run.</p>
