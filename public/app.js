@@ -835,9 +835,9 @@ function toDataUrl(file) {
       for (const file of candidates) {
         try {
           const source = await getFile(token, repo, file.path, base);
-          if (!source || source.content.length > 14000 || chars + source.content.length > 52000) continue;
+          if (!source || source.content.length > 4000 || chars + source.content.length > 9000) continue;
           loaded.push(source); chars += source.content.length;
-          if (loaded.length >= 8) break;
+          if (loaded.length >= 5) break;
         } catch (_) {}
       }
       if (!loaded.length) throw new Error("Could not read usable source files. Check the token's Contents: read permission.");
@@ -857,7 +857,7 @@ function toDataUrl(file) {
         unique.add(file.path); total += file.content.length;
         return { path: file.path, content: file.content };
       });
-      if (total > 60000) throw new Error("The proposed change is too large for this safe first pass.");
+      if (total > 10000) throw new Error("The proposed change is too large for the current AI request limit. No repository changes were made.");
       const originalPaths = new Set(loaded.map(f => f.path));
       for (const file of files) {
         if (!originalPaths.has(file.path) && !candidates.some(c => c.path.startsWith(file.path.replace(/[^/]+$/, "")))) {
