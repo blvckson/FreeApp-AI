@@ -448,7 +448,7 @@ async function askAI() {
 
     // Bound the wait so a stalled backend cannot leave the user waiting forever.
     const requestController = new AbortController();
-    const requestTimeout = setTimeout(() => requestController.abort(), 25000);
+    const requestTimeout = setTimeout(() => requestController.abort(), 90000);
     let response;
     try {
       response = await fetch(API_BASE + "/api/generate", {
@@ -459,7 +459,7 @@ async function askAI() {
       });
     } catch (error) {
       if (error && error.name === "AbortError") {
-        throw new Error("The AI service took longer than 25 seconds. Please retry; the app stopped waiting instead of hanging.");
+        throw new Error("The AI service took longer than 90 seconds. Please retry; your draft is saved so you can continue without retyping it.");
       }
       throw error;
     } finally {
