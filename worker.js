@@ -661,51 +661,106 @@ async function runChatModel(env, messages, options = {}) {
     temperature: options.temperature ?? 0.2
   };
 
-  // Gemini remains the independent primary provider. If its main model is
-  // overloaded or stalls, retry a transient 429/503 once, then use a lighter
-  // Gemini model. Do not silently fall back to the Cloudflare AI allocation.
+  const providerErrors = [];
+  // Keep Gemini when its quota is available, but do not let a Gemini quota
+  // failure prevent free anonymous providers from answering the request.
   if (env.GEMINI_API_KEY) {
     const primaryModel = String(env.GEMINI_MODEL || "gemini-3.8-flash").trim();
     const fallbackModel = String(env.GEMINI_FALLBACK_MODEL || "gemini-3.5-flash-lite").trim();
     try {
-      return await runGeminiModel(env, settings, { model: primaryModel, timeoutMs: 20000 });
+      return await runGeminiModel(env, settings, { model: primaryModel, timeoutMs: 18000 });
     } catch (primaryError) {
-      const primaryMessage = String(primaryError?.message || primaryError);
-      if (/HTTP (?:429|503)\b/.test(primaryMessage)) {
-        await new Promise(resolve => setTimeout(resolve, 800));
-        try {
-          return await runGeminiModel(env, settings, { model: primaryModel, timeoutMs: 6000 });
-        } catch {
-          // Continue to the independent same-provider fallback below.
-        }
-      }
+      providerErrors.push("Gemini primary: " + String(primaryError?.message || primaryError).slice(0, 140));
       if (fallbackModel && fallbackModel !== primaryModel) {
         try {
           return await runGeminiModel(env, {
             ...settings,
             max_tokens: Math.min(settings.max_tokens || 4096, 5000),
             temperature: Math.min(settings.temperature ?? 0.2, 0.2)
-          }, { model: fallbackModel, timeoutMs: 18000 });
+          }, { model: fallbackModel, timeoutMs: 12000 });
         } catch (fallbackError) {
-          const fallbackMessage = String(fallbackError?.message || fallbackError);
-          throw new Error("Gemini primary and fallback models both failed. Primary: " +
-            primaryMessage.slice(0, 180) + " Fallback: " + fallbackMessage.slice(0, 180));
+          providerErrors.push("Gemini fallback: " + String(fallbackError?.message || fallbackError).slice(0, 140));
         }
       }
-      throw primaryError;
     }
   }
 
-  if (!env.AI) throw new Error("No available AI provider is configured.");
-  try {
-    return await env.AI.run(env.FREEAPP_AI_MODEL || DEFAULT_MODEL, settings);
-  } catch (primaryError) {
-    // Preserve availability when the configured/default model is temporarily unavailable.
-    return await env.AI.run(FALLBACK_MODEL, {
-      ...settings,
-      temperature: Math.min(settings.temperature, 0.2)
-    });
+  // Anonymous OpenAI-compatible providers: no user API key is embedded in
+  // the app. Their public free access can be rate-limited or withdrawn.
+  const anonymousProviders = [
+    { name: "LLM7", url: "https://api.llm7.io/v1/chat/completions", model: "default", timeoutMs: 25000 },
+    { name: "Kilo", url: "https://ai-gateway.kilo.ai/api/v1/chat/completions", model: "minimax/minimax-m2.1:free", timeoutMs: 25000 }
+  ];
+  for (const provider of anonymousProviders) {
+    try {
+      return await runAnonymousOpenAIProvider(provider, settings);
+    } catch (error) {
+      providerErrors.push(provider.name + ": " + String(error?.message || error).slice(0, 140));
+    }
   }
+
+  // Pollinations currently documents key-based generation. We probe its
+  // anonymous compatibility endpoint only as a final best-effort fallback;
+  // if it rejects anonymous calls, continue to the configured Cloudflare AI.
+  try {
+    return await runPollinationsAnonymous(settings);
+  } catch (error) {
+    providerErrors.push("Pollinations: " + String(error?.message || error).slice(0, 140));
+  }
+
+  if (env.AI) {
+    try {
+      return await env.AI.run(env.FREEAPP_AI_MODEL || DEFAULT_MODEL, settings);
+    } catch (primaryError) {
+      providerErrors.push("Cloudflare AI primary: " + String(primaryError?.message || primaryError).slice(0, 140));
+      try {
+        return await env.AI.run(FALLBACK_MODEL, {
+          ...settings,
+          temperature: Math.min(settings.temperature, 0.2)
+        });
+      } catch (fallbackError) {
+        providerErrors.push("Cloudflare AI fallback: " + String(fallbackError?.message || fallbackError).slice(0, 140));
+      }
+    }
+  }
+
+  throw new Error("All configured AI providers failed. " + providerErrors.join(" | ").slice(0, 900));
+}
+
+async function runAnonymousOpenAIProvider(provider, settings) {
+  const response = await fetch(provider.url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      model: provider.model,
+      messages: settings.messages,
+      max_tokens: Math.min(settings.max_tokens || 4096, 4096),
+      temperature: settings.temperature ?? 0.2
+    }),
+    signal: AbortSignal.timeout(provider.timeoutMs || 25000)
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const detail = String(body?.error?.message || body?.message || body?.error || ("HTTP " + response.status));
+    throw new Error("HTTP " + response.status + ": " + detail.slice(0, 180));
+  }
+  const answer = body?.choices?.[0]?.message?.content;
+  const text = typeof answer === "string" ? answer.trim()
+    : Array.isArray(answer) ? answer.map(part => typeof part?.text === "string" ? part.text : "").join("").trim() : "";
+  if (!text) throw new Error("Provider returned an empty answer.");
+  return { response: text, provider: provider.name };
+}
+
+async function runPollinationsAnonymous(settings) {
+  const messages = (settings.messages || []).filter(m => m && typeof m.content === "string");
+  const prompt = messages.map(m => (m.role === "system" ? "Instructions: " : m.role === "assistant" ? "Assistant: " : "User: ") + m.content).join("\n\n");
+  const url = "https://gen.pollinations.ai/text/" + encodeURIComponent(prompt.slice(-18000)) +
+    "?model=" + encodeURIComponent("openai/gpt-oss-20b");
+  const response = await fetch(url, { signal: AbortSignal.timeout(12000) });
+  if (!response.ok) throw new Error("HTTP " + response.status + " (anonymous generation may require authorization).");
+  const answer = (await response.text()).trim();
+  if (!answer) throw new Error("Provider returned an empty answer.");
+  return { response: answer, provider: "Pollinations" };
 }
 
 async function runGeminiModel(env, settings, options = {}) {
