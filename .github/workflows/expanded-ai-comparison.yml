@@ -54,18 +54,24 @@ jobs:
 
           def request_json(url, payload, headers=None, timeout=35):
               data=json.dumps(payload).encode()
-              req=urllib.request.Request(url, data=data, headers={"Content-Type":"application/json", **(headers or {})}, method="POST")
+              req=urllib.request.Request(url, data=data, headers={"Content-Type":"application/json","Accept":"application/json","User-Agent":"Mozilla/5.0 (compatible; FreeApp-AI-Benchmark/1.0)", **(headers or {})}, method="POST")
               with urllib.request.urlopen(req, timeout=timeout) as resp:
                   return json.loads(resp.read().decode())
 
           def freeapp_call(prompt):
-              # FreeApp-AI endpoint may use a provider-specific request schema.
-              last=None
-              for body in ({"prompt":prompt},{"message":prompt},{"messages":[{"role":"user","content":prompt}]}):
-                  try:
-                      return request_json(os.environ["FREEAPP_URL"],body)
-                  except Exception as e: last=e
-              raise last
+              # Match the known-good live benchmark request contract first.
+              body={"prompt":prompt,"history":[],"memorySummary":"","images":[]}
+              try:
+                  return request_json(os.environ["FREEAPP_URL"],body,timeout=60)
+              except Exception as first_error:
+                  # Diagnostic fallbacks only; preserve the actual last HTTP error.
+                  last=first_error
+                  for fallback in ({"prompt":prompt},{"message":prompt},{"messages":[{"role":"user","content":prompt}]}):
+                      try:
+                          return request_json(os.environ["FREEAPP_URL"],fallback,timeout=60)
+                      except Exception as e:
+                          last=e
+                  raise last
 
           def llm7_call(prompt):
               return request_json(os.environ["LLM7_URL"],{"model":"default","messages":[{"role":"user","content":prompt}],"temperature":0.2,"max_tokens":1800})
@@ -137,7 +143,7 @@ jobs:
               results["providers"][name]={"tasks_completed":len(scores),"tasks_total":len(tasks),"mean_heuristic_score":round(statistics.mean(scores),1) if scores else None,"mean_latency_seconds":round(statistics.mean(latencies[name]),3) if latencies[name] else None,"category_scores":{r["task"]:r["providers"].get(name,{}).get("score") for r in results["tasks"]}}
           os.makedirs("comparison-results",exist_ok=True)
           with open("comparison-results/expanded-comparison.json","w") as f: json.dump(results,f,indent=2,ensure_ascii=False)
-          print(json.dumps({"providers":results["providers"],"tasks":[{"task":r["task"],"statuses":{n:v.get("status") for n,v in r["providers"].items()}} for r in results["tasks"]]},indent=2))
+          print(json.dumps({"providers":results["providers"],"tasks":[{"task":r["task"],"providers":{n:{"status":v.get("status"),"error":v.get("error"),"score":v.get("score")} for n,v in r["providers"].items()}} for r in results["tasks"]]},indent=2))
           PY
       - name: Upload full comparison results
         if: always()
