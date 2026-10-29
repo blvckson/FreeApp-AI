@@ -151,11 +151,24 @@ public class MainActivity extends Activity {
 
             @Override
             public boolean onRenderProcessGone(WebView view, android.webkit.RenderProcessGoneDetail detail) {
-                // Android 8+ can kill WebView's renderer under memory pressure. Recover
-                // the activity instead of letting a dead WebView take the chat with it.
+                // Android 8+ may kill the renderer under memory pressure. Android requires
+                // the dead WebView to be detached and destroyed before it is recreated.
                 if (!rendererRecoveryScheduled) {
                     rendererRecoveryScheduled = true;
                     runOnUiThread(() -> {
+                        try {
+                            if (view != null) {
+                                android.view.ViewParent parent = view.getParent();
+                                if (parent instanceof android.view.ViewGroup) {
+                                    ((android.view.ViewGroup) parent).removeView(view);
+                                }
+                                view.stopLoading();
+                                view.destroy();
+                                if (webView == view) webView = null;
+                            }
+                        } catch (Exception ignored) {
+                            // Continue recovery even if a partially-dead renderer rejects cleanup.
+                        }
                         if (!isFinishing() && android.os.Build.VERSION.SDK_INT >= 26) recreate();
                     });
                 }
