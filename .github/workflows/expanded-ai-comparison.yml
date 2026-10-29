@@ -5,6 +5,7 @@ on:
   push:
     paths:
       - '.github/workflows/expanded-ai-comparison.yml'
+      - 'worker.js'
 
 permissions:
   contents: read
