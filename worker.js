@@ -985,15 +985,20 @@ async function fetchPage(item) {
 }
 
 function extractText(html) {
-  // Strip executable/style blocks before removing markup. Use regex literals so
-  // \\b remains a regex word boundary (a string "\\b" becomes a backspace).
+  // Remove executable/style blocks before stripping HTML tags. This prevents
+  // hydration scripts and embedded templates from polluting research evidence.
   const withoutBlocks = String(html || "")
-    .replace(/<!--[\\s\\S]*?-->/g, " ")
-    .replace(/<(script|style|noscript|svg|template)\\b[^>]*>[\\s\\S]*?<\\/\\1\\s*>/gi, " ")
-    .replace(/<(iframe|object)\\b[^>]*>[\\s\\S]*?<\\/\\1\\s*>/gi, " ");
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, " ")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style\s*>/gi, " ")
+    .replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript\s*>/gi, " ")
+    .replace(/<svg\b[^>]*>[\s\S]*?<\/svg\s*>/gi, " ")
+    .replace(/<template\b[^>]*>[\s\S]*?<\/template\s*>/gi, " ")
+    .replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe\s*>/gi, " ")
+    .replace(/<object\b[^>]*>[\s\S]*?<\/object\s*>/gi, " ");
   return decodeHtml(withoutBlocks.replace(/<[^>]+>/g, " "))
-    .replace(/[\\t\\r\\n\\f]+/g, " ")
-    .replace(/\\s{2,}/g, " ")
+    .replace(/[\t\r\n\f]+/g, " ")
+    .replace(/\s{2,}/g, " ")
     .trim();
 }
 
