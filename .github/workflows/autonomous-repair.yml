@@ -59,6 +59,12 @@ jobs:
           echo "source_sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
           echo "source_branch=$SOURCE_BRANCH" >> "$GITHUB_OUTPUT"
 
+      - name: Checkout exact failed revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.source.outputs.source_sha }}
+          persist-credentials: true
+
       - name: Download failed build logs
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -127,13 +133,6 @@ jobs:
                   pass
               Path("proposed.patch").write_text(patch + "\n")
           PY
-
-      - name: Checkout exact failed revision
-        if: hashFiles('proposed.patch') != ''
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ steps.source.outputs.source_sha }}
-          persist-credentials: true
 
       - name: Validate patch scope and apply only in runner
         if: hashFiles('proposed.patch') != ''
