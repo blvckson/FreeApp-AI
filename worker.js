@@ -433,6 +433,13 @@ For substantial application requests, deliver implementation, not generic advice
           }
         }
 
+        // Never expose internal tool-call markup or return an empty/trace-only
+        // completion as if it were a successful assistant answer.
+        responseText = sanitizeAssistantOutput(responseText);
+        if (!responseText) {
+          throw new Error("The generation provider returned no usable assistant text after output validation.");
+        }
+
         // Guarantee that retrieved sources are visible to the user even if the
         // model forgets to add a Sources section. Only cite pages actually fetched.
         if (sources.length) {
@@ -968,14 +975,26 @@ async function runChatModel(env, messages, options = {}) {
   // Try the documented anonymous-free Kilo auto router first. The old hard-coded
   // MiniMax model ID was removed from Kilo's live catalog and always returned 404.
   // Kilo's kilo-auto/free route selects an available free model dynamically.
+  // Kilo's auto/free alias has returned HTTP 200 with an empty assistant
+  // message in live checks. Treat that as failure and try documented router
+  // profiles before moving to another provider. Every response is validated.
+  const kiloModels = ["kilo-auto/free", "kilo-auto/efficient", "kilo-auto/balanced", "kilo-auto/small"];
+  const kiloGateways = [
+    { name: "Kilo current gateway", url: "https://api.kilo.ai/api/gateway/chat/completions" },
+    { name: "Kilo compatibility gateway", url: "https://ai-gateway.kilo.ai/api/v1/chat/completions" }
+  ];
+  for (const gateway of kiloGateways) {
+    for (const model of kiloModels) {
+      const provider = { name: gateway.name + " (" + model + ")", url: gateway.url, model, timeoutMs: 9000 };
+      try {
+        return await runAnonymousOpenAIProvider(provider, settings);
+      } catch (error) {
+        providerErrors.push(provider.name + ": " + String(error?.message || error).slice(0, 110));
+      }
+    }
+  }
   const anonymousProviders = [
-    // Current Kilo Gateway base URL. kilo-auto/free is documented as an
-    // anonymous-access model and resolves dynamically to available free models.
-    { name: "Kilo Free (current gateway)", url: "https://api.kilo.ai/api/gateway/chat/completions", model: "kilo-auto/free", timeoutMs: 18000 },
-    // Compatibility route retained in Kilo's OpenAI-compatible API reference.
-    // Try both official routes before falling back to unrelated providers.
-    { name: "Kilo Free (compatibility gateway)", url: "https://ai-gateway.kilo.ai/api/v1/chat/completions", model: "kilo-auto/free", timeoutMs: 18000 },
-    { name: "LLM7", url: "https://api.llm7.io/v1/chat/completions", model: "default", timeoutMs: 12000 }
+    { name: "LLM7", url: "https://api.llm7.io/v1/chat/completions", model: "default", timeoutMs: 10000 }
   ];
   for (const provider of anonymousProviders) {
     try {
@@ -1149,6 +1168,15 @@ async function runGeminiModel(env, settings, options = {}) {
     throw new Error("Gemini returned no text (" + reason + ").");
   }
   return { response: answer };
+}
+
+function sanitizeAssistantOutput(value) {
+  return String(value || "")
+    .replace(/<dots_function_call>[\\s\\S]*?<\\/dots_function_call>/gi, "")
+    .replace(/<\\|(?:tool_call|tool_response|function_call)[^>]*\\|>[\\s\\S]*?(?=<\\||$)/gi, "")
+    .replace(/^\\s*(?:tool|assistant to=[^\\n]+|<\\|.*?\\|>)\\s*$/gim, "")
+    .replace(/\\n{3,}/g, "\\n\\n")
+    .trim();
 }
 
 function buildResearchQueries(query) {
