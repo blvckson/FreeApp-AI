@@ -885,27 +885,16 @@ function toDataUrl(file) {
       if (!loaded.length) throw new Error("Could not read usable source files. Check the token's Contents: read permission.");
       status.textContent = "Preparing a code change from " + loaded.length + " source file(s)...";
       const proposal = await askForPatch(task, loaded, candidates.map(x => x.path));
-      if (!Array.isArray(proposal.files) || !proposal.files.length) {
-        result.textContent = (proposal.summary || "No changes proposed.") + "\n\n" + (proposal.notes || []).join("\n");
-        status.textContent = "No repository files changed.";
-        return;
-      }
-      if (proposal.files.length > 12) throw new Error("The AI proposed more than 5 files. No repository changes were made.");
-      const unique = new Set();
-      let total = 0;
-      const files = proposal.files.map(file => {
-        if (!file || !safePath(file.path) || typeof file.content !== "string") throw new Error("The AI returned an invalid or disallowed file path. No changes were made.");
-        if (unique.has(file.path)) throw new Error("The AI proposed the same file more than once.");
-        unique.add(file.path); total += file.content.length;
-        return { path: file.path, content: file.content };
-      });
-      if (total > 30000) throw new Error("The proposed change is too large for the current AI request limit. No repository changes were made.");
-      const originalPaths = new Set(loaded.map(f => f.path));
-      for (const file of files) {
-        if (!originalPaths.has(file.path) && !candidates.some(c => c.path.startsWith(file.path.replace(/[^/]+$/, "")))) {
-          throw new Error("The AI proposed a new file outside the inspected source areas: " + file.path);
+      const validation = window.FreeAppCodingGuard.validateProposal(proposal, loaded.map(file => file.path));
+      if (!validation.ok) {
+        if (validation.noChanges) {
+          result.textContent = validation.message;
+          status.textContent = "No repository files changed.";
+          return;
         }
+        throw new Error(validation.message);
       }
+      const files = validation.files;
       status.textContent = "Creating a separate branch and committing " + files.length + " file(s)...";
       const branch = "freeapp-ai/" + new Date().toISOString().replace(/[^0-9TZ]/g, "-").replace(/-+$/,"").toLowerCase();
       await createBranch(token, repo, branch, ref.object.sha);
