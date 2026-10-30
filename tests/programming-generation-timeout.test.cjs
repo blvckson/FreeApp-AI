@@ -26,6 +26,7 @@ test("programming requests prioritize a configured Gemini provider", () => {
   assert.ok(settings >= 0, "programming mode must be explicit in provider settings");
   assert.ok(priority > settings, "configured Gemini must be attempted for programming requests");
   assert.ok(anonymous > priority, "programming Gemini priority must precede anonymous provider probing");
+  assert.match(source, /settings\.programming \? \[[\s\S]{0,500}cohere\/north-mini-code:free/);
   assert.match(source, /if \(env\.GEMINI_API_KEY && !geminiAttempted\)/);
 });
 
