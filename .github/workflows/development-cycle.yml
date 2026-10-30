@@ -187,7 +187,7 @@ jobs:
           echo "Autonomous repair proposal workflow dispatched for failed validation run $FAILED_RUN_ID."
 
       - name: Wait for repair diagnosis and proposal
-        if: steps.checks.outputs.conclusion != 'success' && steps.checks.outputs.run_id != ''
+        if: failure() && steps.checks.outputs.conclusion != 'success' && steps.checks.outputs.run_id != ''
         id: repair_result
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
