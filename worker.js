@@ -12,13 +12,15 @@ CORE BEHAVIOUR
 - Do not change the user's requested scope, remove requested features, or add unrelated work. If a request has several parts, address every part.
 - Do not ask the user to repeat information already present in the conversation. Ask a clarifying question only when a missing detail materially prevents a correct answer; otherwise state a reasonable assumption and proceed.
 
-DEPTH AND TEACHING
-- Default to a thorough, detailed answer. Do not make answers brief merely for convenience. Be concise only when the user asks for a short answer or the task clearly calls for one.
-- Answer the direct question first, then explain the reasoning, background, steps, examples, alternatives, risks, useful suggestions, and next actions where relevant.
-- Help the user understand the topic deeply. Cover the important information needed to make an informed decision, but avoid padding, repetition, or unrelated facts.
-- For complex tasks, organise the response with clear headings, numbered steps, examples, comparisons, and checklists as useful.
-- Offer practical suggestions and explain why they help. Distinguish essential actions from optional improvements.
-- If the user is learning, explain unfamiliar terms in plain language without talking down to them.
+DEPTH, LENGTH, AND READABILITY
+- Match answer length to the actual task, in the same spirit as a strong ChatGPT answer: enough detail to understand the topic, solve the problem, and satisfy every requirement, but neither padded nor incomplete.
+- Do not use a fixed word count. A simple factual question usually needs a direct answer plus a short explanation; an ordinary how-to or learning question needs clear steps and enough context; a complex research, reasoning, coding, or app-building task needs the full analysis and deliverables its requirements demand.
+- Answer the user's main question or give the result first. Then add only the explanation, evidence, steps, examples, caveats, and next actions that materially help.
+- Prefer plain, readable language, short paragraphs, descriptive headings, and lists when they improve scanning. Define unfamiliar terms briefly.
+- Do not repeat the same point in the introduction, body, and conclusion. Avoid filler, generic introductions, unnecessary disclaimers, and unrelated tangents.
+- Never shorten an answer by dropping requested requirements, essential reasoning, important evidence, working code, tests, or instructions. If a task is complex, completeness takes priority over brevity.
+- Do not make a simple answer look like a report. Do not make a complex task look like a one-line summary.
+- Offer practical suggestions only when they are relevant, and distinguish essential steps from optional improvements.
 - If the user is frustrated about a repeated failure, acknowledge the specific issue, preserve what already works, and focus on a verifiable fix rather than making empty promises.
 
 RESEARCH DOCUMENTS, CODE, AND INVENTION WORK MODE
@@ -322,8 +324,14 @@ export default {
         const buildMode = isComplexAppBuildRequest(prompt);
         const codeTask = isSoftwareEngineeringRequest(prompt) && /\b(code|program|debug|fix|refactor|implement|algorithm|api|backend|frontend|database|test|compile|build|app|application|software|repository|github)\b/i.test(prompt);
         const researchMode = /\b(research|investigate|compare|evaluate|latest|current|evidence|sources|literature review|market analysis)\b/i.test(prompt);
+        const responseDepthGuidance = buildMode || codeTask
+          ? "RESPONSE SIZE: Full deliverable. Include all requested implementation details, code, tests, validation, and run/build steps. Be readable and avoid repetition; do not omit required material to make the answer shorter."
+          : researchMode || complexity.complex
+            ? "RESPONSE SIZE: Substantive explanation. Explain the key reasoning and evidence, cover each requested point, and give a clear conclusion. Use enough detail to make the answer independently understandable without padding."
+            : "RESPONSE SIZE: Focused conversational answer. Give the direct answer and the minimum useful explanation or steps needed for understanding. Expand when the question requires it; do not force report-style headings or unnecessary background.";
         const messages = [
           { role: "system", content: SYSTEM_PROMPT },
+          { role: "system", content: responseDepthGuidance },
           ...(researchMode ? [{
             role: "system",
             content: `HIGH-RIGOUR RESEARCH DELIVERY CONTRACT
@@ -369,7 +377,7 @@ For substantial application requests, deliver implementation, not generic advice
           ...(memorySummary ? [{ role: "system", content: "PERSISTENT USER MEMORY (context only; prefer newer explicit statements in the current conversation if there is a conflict):\\n" + memorySummary }] : []),
           ...history,
           { role: "user", content:
-            `SUPPORTING EVIDENCE FOR THE CURRENT REQUEST:\n${evidence}\n\nCURRENT USER MESSAGE:\n${prompt}\n\nRespond to the current message directly. Use earlier conversation messages only to maintain context and resolve references. Give a detailed, well-organised answer with relevant explanations, practical suggestions, examples, and next steps where useful. Avoid unrelated tangents. If web research was supplied, include a Sources section containing only URLs actually used. For programming or app-building tasks, clearly distinguish a design/pseudocode from a complete implementation. State explicitly when code has not been compiled or executed in this environment, and never imply that a build or test succeeded unless it actually did.`
+            `SUPPORTING EVIDENCE FOR THE CURRENT REQUEST:\n${evidence}\n\nCURRENT USER MESSAGE:\n${prompt}\n\nRespond to the current message directly. Use earlier conversation messages only to maintain context and resolve references. Match the answer length to the task: provide enough clear explanation to fully answer and solve it, but avoid padding, repetition, and unnecessary background. Use a concise direct answer for simple questions and a complete, well-organised deliverable for complex tasks. If web research was supplied, include a Sources section containing only URLs actually used. For programming or app-building tasks, clearly distinguish a design/pseudocode from a complete implementation. State explicitly when code has not been compiled or executed in this environment, and never imply that a build or test succeeded unless it actually did.`
           }
         ];
 
