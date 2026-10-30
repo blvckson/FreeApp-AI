@@ -12,7 +12,7 @@
     if (path.startsWith("/") || path.includes("\\") || path.includes("\0")) return false;
     const parts = path.split("/");
     if (parts.some(part => !part || part === "." || part === "..")) return false;
-    if (/(^|\/)(?:\.git|secrets?|\.env)(?:\/|$)/i.test(path)) return false;
+    if (/(^|\/)(?:\.git|\.env[^/]*|secrets?[^/]*)(?:\/|$)/i.test(path)) return false;
     if (/\.(?:pem|key|p12|keystore|jks|apk|aab)$/i.test(path) || !ALLOWED_EXT.test(path)) return false;
     if (/(^|\/)(?:node_modules|build|dist|vendor|\.gradle|\.idea)(?:\/|$)/i.test(path)) return false;
     if (/(?:^|\/)package-lock\.json$|(?:^|\/)yarn\.lock$|(?:^|\/)pnpm-lock\.yaml$/i.test(path)) return false;
