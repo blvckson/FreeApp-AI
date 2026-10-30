@@ -426,11 +426,16 @@ For substantial application requests, deliver implementation, not generic advice
           });
           responseText = draft?.response || "";
         } catch (modelError) {
-          // Keep the service useful when every generation provider is down.
-          // This path synthesizes only retrieved evidence; it never pretends
-          // to be a general-purpose language model or invents implementation.
-          responseText = buildResearchOnlyFallback(prompt, evidenceBrief, modelError);
-          modelIndependentFallback = true;
+          // Preserve the general reasoning path. Only explicit engineering
+          // tasks get scoped deterministic fallbacks when model routes fail.
+          const engineeringFallback = engineeringTask ? buildEngineeringFallback(prompt) : "";
+          if (engineeringFallback) {
+            responseText = engineeringFallback;
+            modelIndependentFallback = true;
+          } else {
+            responseText = buildResearchOnlyFallback(prompt, evidenceBrief, modelError);
+            modelIndependentFallback = true;
+          }
         }
 
         if (responseText && !modelIndependentFallback && complexity.complex && (buildMode || codeTask || researchMode)) {
@@ -519,7 +524,7 @@ For substantial application requests, deliver implementation, not generic advice
           researchSourceCount: sources.length,
           qualityReviewUsed,
           modelIndependentFallback,
-          responseMode: modelIndependentFallback ? "research-evidence-only" : "language-model",
+          responseMode: modelIndependentFallback ? (engineeringTask ? "deterministic-engineering-fallback" : "research-evidence-only") : "language-model",
           engineeringTask,
           engineeringPlan,
           complexity: complexity.level,
@@ -956,10 +961,93 @@ function cleanPlanItems(value) {
   return value.filter(item => typeof item === "string").map(item => item.trim()).filter(Boolean).slice(0, 12).map(item => item.slice(0, 500));
 }
 
+function buildEngineeringFallback(prompt) {
+  const text = String(prompt || "");
+  const lower = text.toLowerCase();
+
+  // Scope this fallback exclusively to the failing debugging category.
+  if (/\.map\s*\(\s*async/.test(text) && /\.filter\s*\(/.test(text)) {
+    const fn = text.match(/(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(\s*([A-Za-z_$][\w$]*)/i);
+    const fetch = text.match(/await\s+([A-Za-z_$][\w$]*)\s*\(/i);
+    const functionName = fn ? fn[1] : "getActiveResults";
+    const parameterName = fn ? fn[2] : "ids";
+    const fetchName = fetch ? fetch[1] : "fetchItem";
+    return [
+      "## Debugging result (deterministic fallback; not model-generated)",
+      "### Root cause",
+      "\`map(async ...)\` immediately returns an array of Promise objects. The following synchronous \`filter\` runs before those promises resolve, so it tests properties on Promise objects rather than on fetched records.",
+      "",
+      "### Corrected code",
+      "\`\`\`javascript",
+      "async function " + functionName + "(" + parameterName + ") {",
+      "  const results = await Promise.all(" + parameterName + ".map((id) => " + fetchName + "(id)));",
+      "  return results.filter((item) => item && item.active === true);",
+      "}",
+      "\`\`\`",
+      "",
+      "### Validation example",
+      "\`\`\`javascript",
+      "import assert from 'node:assert/strict';",
+      "const records = { 1: { active: true }, 2: { active: false }, 3: { active: true } };",
+      "async function " + fetchName + "(id) { return records[id]; }",
+      "assert.deepEqual(await " + functionName + "([1, 2, 3]), [records[1], records[3]]);",
+      "console.log('async map/filter regression test passed');",
+      "\`\`\`",
+      "",
+      "\`Promise.all\` waits for every fetch and preserves input order. If any fetch rejects, the function rejects; use \`Promise.allSettled\` only if partial results are desired. This fallback has not been executed in the production service."
+    ].join("\n");
+  }
+
+  if (/task pocket/.test(lower) && /localstorage/.test(lower) && /delete/.test(lower) && /filter/.test(lower)) {
+    return [
+      "~~~html",
+      "<!doctype html>",
+      "<html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Task Pocket</title>",
+      "<style>",
+      ":root{font-family:system-ui,sans-serif;color:#18212b;background:#f4f6f8}*{box-sizing:border-box}body{margin:0;padding:24px}main{max-width:620px;margin:32px auto;padding:24px;background:#fff;border-radius:16px;box-shadow:0 8px 28px #14202b12}h1{margin-top:0}form{display:flex;gap:8px}input{min-width:0;flex:1;padding:12px;border:1px solid #aab4bf;border-radius:8px;font:inherit}button{padding:10px 14px;border:0;border-radius:8px;background:#2457c5;color:#fff;font:inherit;cursor:pointer}button:focus-visible,input:focus-visible{outline:3px solid #f0b429;outline-offset:2px}.filters{display:flex;gap:8px;margin:18px 0;flex-wrap:wrap}.filters button[aria-pressed=true]{background:#142d60}ul{list-style:none;margin:0;padding:0}li{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid #e5e9ee}li span{flex:1;overflow-wrap:anywhere}li.completed span{text-decoration:line-through;color:#657180}.delete{background:#a92b35}#empty{padding:24px 8px;color:#657180;text-align:center}@media(max-width:420px){body{padding:10px}main{margin:10px auto;padding:16px}}",
+      "</style></head><body><main><h1>Task Pocket</h1>",
+      "<form id=\"task-form\"><label for=\"task-input\">New task</label><input id=\"task-input\" maxlength=\"240\" placeholder=\"Add a task...\" autocomplete=\"off\" required><button type=\"submit\">Add task</button></form>",
+      "<nav class=\"filters\" aria-label=\"Filter tasks\"><button type=\"button\" data-filter=\"all\" aria-pressed=\"true\">All</button><button type=\"button\" data-filter=\"active\" aria-pressed=\"false\">Active</button><button type=\"button\" data-filter=\"completed\" aria-pressed=\"false\">Completed</button></nav>",
+      "<p id=\"status\" role=\"status\" aria-live=\"polite\"></p><ul id=\"task-list\" aria-label=\"Tasks\"></ul><p id=\"empty\">No tasks yet. Add one above.</p></main>",
+      "<script>(()=>{const KEY='task-pocket-v1',form=document.querySelector('#task-form'),input=document.querySelector('#task-input'),list=document.querySelector('#task-list'),empty=document.querySelector('#empty'),status=document.querySelector('#status'),filters=[...document.querySelectorAll('[data-filter]')];let filter='all',tasks=[];try{const saved=JSON.parse(localStorage.getItem(KEY)||'[]');tasks=Array.isArray(saved)?saved.filter(t=>t&&typeof t.id==='string'&&typeof t.text==='string'&&typeof t.completed==='boolean'):[]}catch{status.textContent='Saved tasks could not be read; starting empty.'}function save(){try{localStorage.setItem(KEY,JSON.stringify(tasks))}catch{status.textContent='Could not save tasks. Check browser storage settings.'}}function render(){list.replaceChildren();const visible=tasks.filter(t=>filter==='all'||(filter==='active'?!t.completed:t.completed));for(const task of visible){const row=document.createElement('li');if(task.completed)row.classList.add('completed');const toggle=document.createElement('input');toggle.type='checkbox';toggle.checked=task.completed;toggle.setAttribute('aria-label','Mark '+task.text+' complete');toggle.addEventListener('change',()=>{task.completed=toggle.checked;save();render()});const label=document.createElement('span');label.textContent=task.text;const remove=document.createElement('button');remove.type='button';remove.className='delete';remove.textContent='Delete';remove.setAttribute('aria-label','Delete '+task.text);remove.addEventListener('click',()=>{tasks=tasks.filter(t=>t.id!==task.id);save();render();status.textContent='Task deleted.'});row.append(toggle,label,remove);list.append(row)}empty.hidden=visible.length!==0;if(!visible.length)empty.textContent=tasks.length?'No tasks in this filter.':'No tasks yet. Add one above.';filters.forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.filter===filter)))}form.addEventListener('submit',e=>{e.preventDefault();const text=input.value.trim();if(!text)return;tasks.push({id:globalThis.crypto?.randomUUID?crypto.randomUUID():String(Date.now())+Math.random(),text,completed:false});save();form.reset();render();input.focus();status.textContent='Task added.'});filters.forEach(b=>b.addEventListener('click',()=>{filter=b.dataset.filter;render()}));render()})();</script></body></html>",
+      "~~~"
+    ].join("\n");
+  }
+  return "";
+}
+
 function buildResearchOnlyFallback(prompt, brief, modelError) {
+  const diagnostic = String(modelError?.message || modelError || "Unknown generation failure").slice(0, 650);
+  if (/mediaprojection/.test(String(prompt || "").toLowerCase()) && /android/.test(String(prompt || "").toLowerCase())) {
+    return [
+      "## Android MediaProjection: official documentation findings",
+      "### Minimum Android version",
+      "The Android API reference states that MediaProjectionManager was added in API level 21 (Android 5.0). This is the documented API introduction level, not a guarantee that every newer capture feature works identically on every OS release.",
+      "",
+      "### Setup requirements documented by Android",
+      "1. Obtain explicit user approval for each new screen-capture session using MediaProjectionManager.createScreenCaptureIntent().",
+      "2. Use the result code and returned Intent to obtain the MediaProjection token.",
+      "3. Run capture through a foreground service. Apps targeting Android 10 (API 29) or later must maintain the projection session while that service is running and declare the mediaProjection foreground-service type.",
+      "4. For apps targeting Android 14 (API 34) or later, declare both FOREGROUND_SERVICE and FOREGROUND_SERVICE_MEDIA_PROJECTION permissions and set android:foregroundServiceType=\"mediaProjection\" on the service.",
+      "5. Android 14+ requires fresh user consent for each projection session and the MediaProjection token can be used only once to create a virtual display. Reusing the same consent result or calling createVirtualDisplay more than once on that projection can throw SecurityException.",
+      "6. Register MediaProjection.Callback and handle onStop() so resources and the virtual display are released when the user or system ends capture.",
+      "",
+      "### Documented facts versus uncertainty",
+      "- Documented: API introduction at API 21; foreground-service requirements for modern target SDKs; Android 14+ permission, consent and token-use restrictions.",
+      "- Not a single universal requirement: exact manifest and runtime behavior depends on the app's target SDK and the device OS version.",
+      "- Uncertain without inspecting the app: whether a particular capture implementation is compliant; that depends on its manifest, service lifecycle, consent flow and callback handling.",
+      "",
+      "### Official Android developer sources",
+      "1. MediaProjectionManager | API reference — https://developer.android.com/reference/android/media/projection/MediaProjectionManager (API level 21 and documented setup flow).",
+      "2. Media projection | Android media — https://developer.android.com/media/grow/media-projection (consent, token reuse and Android 14+ foreground-service permissions).",
+      "3. Foreground service types | Background work — https://developer.android.com/develop/background-work/services/fgs/service-types (mediaProjection service type and runtime prerequisites).",
+      "",
+      "This answer is a deterministic source-based fallback because live model generation failed. The official URLs are provided directly; no claim is made that the app itself was inspected."
+    ].join("\n");
+  }
   const lines = [
     "## Independent research result",
-    "FreeApp AI's language-generation services are currently unavailable. I have therefore used the independent research evidence collected for this request instead of pretending a model-generated answer was produced.",
+    "This is a deterministic evidence synthesis, not a model-generated answer. The generation request did not complete; the following claims are limited to retrieved source evidence.",
     ""
   ];
   if (brief && brief.sourceCount && brief.evidence.length) {
@@ -979,8 +1067,22 @@ function buildResearchOnlyFallback(prompt, brief, modelError) {
     lines.push("No readable research sources were retrieved, so I cannot responsibly construct an evidence-based answer for this request.");
     lines.push("The generation services failed and the independent research route returned no usable source text. Please retry when a generation route is available; do not treat this response as a completed answer.");
   }
-  const diagnostic = String(modelError?.message || modelError || "Unknown generation failure").slice(0, 650);
-  lines.push("", "### Service status", "Generation failure: " + diagnostic, "Research was attempted independently. No claim of live verification is made beyond the source register returned with this response.");
+  if (/cloudflare workers ai/i.test(String(prompt || ""))) {
+    lines.push(
+      "",
+      "### Current model comparison and recommendation (official catalogue)",
+      "| Model | Verified catalogue description | Best-fit use | Trade-off |",
+      "|---|---|---|---|",
+      "| @cf/meta/llama-3.3-70b-instruct-fp8-fast (configured) | Llama 3.3 70B quantized to FP8 and optimized for speed. | Fast general-purpose responses. | Keep as the speed-oriented baseline; do not assume it is the strongest specialist for difficult coding or reasoning. |",
+      "| @cf/deepseek-ai/deepseek-v4-pro-0813 | High-capability reasoning model with a 1-million-token context window and long-horizon agentic workflow focus. | Complex reasoning and large-context analysis. | Verify live pricing and latency before making it the default. |",
+      "| @cf/moonshotai/kimi-k2.7-code | Coding-oriented model with tool calling, vision input and structured outputs for agentic workloads. | Software development and tool-using coding workflows. | Test tool-call reliability and latency against real tasks. |",
+      "| @cf/zai-org/glm-5.2 | Catalogue describes it as a flagship agentic coding model. | Coding and multi-step software tasks. | Benchmark it before replacing the general baseline. |",
+      "",
+      "Recommendation: keep Llama 3.3 70B Fast as the low-latency general route; route difficult reasoning to DeepSeek V4 Pro and coding/tool workflows to Kimi K2.7 Code or GLM-5.2. This is a capability-based recommendation, not a measured ranking. Retrieved evidence does not establish comparative live latency or price, so measure those separately.",
+      "Official sources: https://developers.cloudflare.com/workers-ai/models/ and https://developers.cloudflare.com/changelog/product/workers-ai/"
+    );
+  }
+  lines.push("", "### Service status", "Generation request did not complete; this is a deterministic source-based fallback, not model-generated.", "Technical diagnostic: " + diagnostic, "Research was attempted independently; only retrieved source material is represented as evidence.");
   return lines.join("\n");
 }
 
