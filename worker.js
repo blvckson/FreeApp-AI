@@ -437,7 +437,7 @@ For substantial application requests, deliver implementation, not generic advice
             // as if they were a generated solution. A clear provider diagnostic
             // is safer than plausible-looking but irrelevant code or research.
             if (codeTask || buildMode) {
-              responseText = "I couldn't generate or verify the requested code because every configured inference provider failed. No code was generated, executed, committed, or built. Provider diagnostics: " + String(modelError?.message || modelError).slice(0, 900) + "\\n\\nPlease check the configured Kilo/LLM7 credentials and provider quota, then retry.";
+              responseText = "I couldn't generate or verify the requested code because every configured inference provider failed. No code was generated, executed, committed, or built. Provider diagnostics: " + String(modelError?.message || modelError).slice(0, 900) + "\n\nPlease check the configured Kilo/LLM7 credentials and provider quota, then retry.";
             } else {
               responseText = buildResearchOnlyFallback(prompt, evidenceBrief, modelError);
             }
