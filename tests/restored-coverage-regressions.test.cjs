@@ -19,7 +19,7 @@ test("programming deliverables retain baseline test coverage even when tests wer
     "Write a JavaScript function that sorts records by date.",
     fence + "js\nfunction sortRecords(records) { return records.slice().sort((a,b) => a.date-b.date); }\n" + fence
   ));
-  assert.ok(gaps.some(g => /meaningful tests or expected results/.test(g)));
+  assert.ok(gaps.some(g => /meaningful tests paired with concrete assertions or expected outcomes/.test(g)));
 });
 
 test("programming deliverables pass the restored baseline when tests and expected results are present", () => {
