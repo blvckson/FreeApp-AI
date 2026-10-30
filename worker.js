@@ -847,20 +847,16 @@ function selectIndependentResearchSources(rankedItems, limit = 8, perDomainLimit
     if (selected.length >= maxItems) break;
   }
 
-  // Restore the previous source-coverage behaviour as a context-only fallback:
-  // if strict sentence matching leaves fewer than two sources, retain readable
-  // ranked pages in the source register. Their text is NOT promoted to claims;
-  // only query-matched sentences above can support factual evidence.
-  const minimumCoverage = Math.min(2, maxItems);
-  if (selected.length < minimumCoverage) {
-    for (const item of items) {
-      if (!item || !item.host || selected.includes(item)) continue;
-      const count = counts.get(item.host) || 0;
-      if (count >= maxPerDomain) continue;
-      selected.push({ ...item, relevant: Array.isArray(item.relevant) ? item.relevant : [], contextOnly: true });
-      counts.set(item.host, count + 1);
-      if (selected.length >= minimumCoverage) break;
-    }
+  // Restore the earlier broad source-register coverage after evidence-first
+  // selection. Readable ranked pages remain visible as context-only sources,
+  // but their sentences are never promoted into factual claims.
+  for (const item of items) {
+    if (!item || !item.host || selected.includes(item)) continue;
+    const count = counts.get(item.host) || 0;
+    if (count >= maxPerDomain) continue;
+    selected.push({ ...item, relevant: [], contextOnly: true });
+    counts.set(item.host, count + 1);
+    if (selected.length >= maxItems) break;
   }
   return selected;
 }
@@ -974,8 +970,10 @@ function engineeringDeliverableGaps(prompt, response, buildMode = false) {
     if (/\b(offline|sync|synchroni[sz]ation|network loss)\b/.test(request) && !/\b(offline|sync|conflict|retry|reconcil)\b/i.test(answer)) {
       gaps.push("offline behavior, synchronization and conflict recovery");
     }
-    const acceptanceCount = (answer.match(/\b(?:acceptance test|test case|scenario)\s*#?\s*\d+/gi) || []).length;
-    if (/\b(acceptance tests|test cases|at least eight|8 tests)\b/.test(request) && acceptanceCount < 8) {
+    // Accept common numbered test formats (including "Test 1", "1.",
+    // "Scenario 1" and "Acceptance test #1") instead of one brittle label.
+    const numberedTests = answer.match(/(?:^|\n)\s*(?:(?:acceptance\s+)?test(?:\s+case)?|scenario)\s*#?\s*\d+\s*[:.)-]?|(?:^|\n)\s*\d+[.)]\s+(?=(?:given|when|then|test|scenario|verify|check)\b)/gim) || [];
+    if (/\b(acceptance tests|test cases|at least eight|8 tests)\b/.test(request) && numberedTests.length < 8) {
       gaps.push("eight individually numbered acceptance tests with expected results");
     }
     if (!/\b(build|gradle|install|run|npm|command)\b/i.test(answer)) gaps.push("exact build and run instructions");
