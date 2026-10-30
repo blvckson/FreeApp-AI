@@ -165,9 +165,9 @@ export default {
       if (prompt.length > MAX_PROMPT) {
         return json({ error: `Prompt is too long. Maximum is ${MAX_PROMPT} characters.` }, 400);
       }
-      if (!env.AI && !env.GEMINI_API_KEY) {
-        return json({ error: "No AI provider is configured. Configure GEMINI_API_KEY or the existing AI binding." }, 503);
-      }
+      // Do not reject requests based only on secret-backed providers.
+      // runChatModel also has anonymous free-provider routes (Kilo, LLM7,
+      // and Pollinations), so it must be allowed to try every available route.
 
       try {
         const imageContext = await withTimeout(
