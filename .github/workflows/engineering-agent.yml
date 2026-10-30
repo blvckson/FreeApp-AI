@@ -124,6 +124,12 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      - name: Set up Gradle
+        if: steps.patch.outputs.valid == 'true' && (contains(inputs.task, 'Android') || contains(inputs.task, 'APK') || contains(inputs.task, 'app/src') || contains(inputs.task, 'build') || contains(inputs.task, 'UI'))
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
       - name: Prepare Android assets and run build/tests
         if: steps.patch.outputs.valid == 'true' && (contains(inputs.task, 'Android') || contains(inputs.task, 'APK') || contains(inputs.task, 'app/src') || contains(inputs.task, 'build') || contains(inputs.task, 'UI'))
         run: |
@@ -156,7 +162,8 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           BRANCH="ai-engineering/run-${GITHUB_RUN_ID}"
           git checkout -b "$BRANCH"
-          git add worker.js package.json wrangler.toml public app
+          # Patch scope was validated above; stage only the actual changes.
+          git add -A
           git diff --cached --quiet && { echo "No changes to commit."; exit 1; }
           git commit -m "AI engineering proposal: ${TASK:0:60}"
           git push origin "$BRANCH"
