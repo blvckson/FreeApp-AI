@@ -61,10 +61,11 @@ test("app-building validation accepts a complete relevant deliverable", () => {
 });
 
 
-test("engineering planning remains enabled when independent research retrieves no usable sources", () => {
+test("engineering planning remains enabled for complex work even when research retrieves no usable sources", () => {
   const worker = fs.readFileSync(path.join(__dirname, "..", "worker.js"), "utf8");
-  assert.match(worker, /if \(engineeringTask\)\s*\{\s*try\s*\{\s*const planResult/);
-  assert.doesNotMatch(worker, /if \(engineeringTask && !evidenceBrief\.noUsableEvidence\)/);
+  assert.match(worker, /if \(shouldUseEngineeringPlanner\(prompt, buildMode\)\)/);
+  assert.match(worker, /function shouldUseEngineeringPlanner\(prompt, buildMode = false\)/);
+  assert.match(worker, /if \(buildMode\) return true/);
   assert.match(worker, /still produce a sound plan from the task/);
 });
 
