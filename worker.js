@@ -883,7 +883,7 @@ function buildIndependentEvidenceBrief(query, sources) {
 
 function isSoftwareEngineeringRequest(prompt) {
   const text = String(prompt || "").toLowerCase();
-  return /\\b(build|create|develop|implement|code|program|debug|fix|refactor|commit|deploy|compile|apk|repository|github|workflow|pull request|software|app|application|api|backend|frontend|database|test suite)\\b/.test(text);
+  return /\b(build|create|develop|implement|code|program|debug|fix|refactor|commit|deploy|compile|apk|repository|github|workflow|pull request|software|app|application|api|backend|frontend|database|test suite)\b/i.test(text);
 }
 
 function cleanPlanItems(value) {
