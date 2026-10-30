@@ -384,10 +384,10 @@ For substantial application requests, deliver implementation, not generic advice
 
         const engineeringTask = isSoftwareEngineeringRequest(prompt);
         let engineeringPlan = null;
-        if (engineeringTask && !evidenceBrief.noUsableEvidence) {
+        if (engineeringTask) {
           try {
             const planResult = await runChatModel(env, [
-              { role: "system", content: `You are FreeApp AI's software-engineering task planner. Produce a concise, actionable implementation plan as strict JSON only. Schema: {"goal":string,"requirements":[string],"assumptions":[string],"files_to_inspect":[string],"implementation_steps":[string],"verification_steps":[string],"risks":[string]}. Do not claim repository access, edits, commits, builds, or tests. Infer likely file paths only as candidates, label assumptions, and keep scope limited to the request. Use retrieved evidence only for external technical facts.` },
+              { role: "system", content: `You are FreeApp AI's software-engineering task planner. Produce a concise, actionable implementation plan as strict JSON only. Schema: {"goal":string,"requirements":[string],"assumptions":[string],"files_to_inspect":[string],"implementation_steps":[string],"verification_steps":[string],"risks":[string]}. Do not claim repository access, edits, commits, builds, or tests. Infer likely file paths only as candidates, label assumptions, and keep scope limited to the request. Use retrieved evidence only for external technical facts. If no usable research evidence is supplied, still produce a sound plan from the task and explicitly list external facts that require later verification. Do not invent repository files or claim tool access. Keep steps testable and ordered; include rollback or compatibility checks when relevant.` },
               { role: "user", content: "TASK:\\n" + prompt.slice(0, 9000) + "\\n\\nRECENT CONTEXT:\\n" + history.slice(-6).map(x => x.role + ": " + x.content).join("\\n").slice(0, 5000) + "\\n\\nRESEARCH EVIDENCE:\\n" + formatIndependentEvidenceBrief(evidenceBrief).slice(0, 7000) }
             ], { max_tokens: 1400, temperature: 0.1 });
             const parsedPlan = parseJsonObject(planResult?.response || "");
@@ -942,9 +942,10 @@ function engineeringDeliverableGaps(prompt, response, buildMode = false) {
   // Restore the baseline completeness gate used by the stronger earlier
   // programming/app-building path: every engineering deliverable must include
   // a test/expected-result signal, even when the prompt does not say "test".
-  const hasBaselineTestCoverage = /\b(test|assert|expected output|acceptance criteria)\b/i.test(answer);
-  if (!hasBaselineTestCoverage) {
-    gaps.push("meaningful tests or expected results for the implementation");
+  const hasTestSection = /\b(test|tests|test case|validation|acceptance criteria)\b/i.test(answer);
+  const hasExpectedBehavior = /\b(assert(?:ion)?|expect\s*\(|expected (?:output|result|behavior)|should return|should reject|should throw)\b/i.test(answer);
+  if (!hasTestSection || !hasExpectedBehavior) {
+    gaps.push("meaningful tests paired with concrete assertions or expected outcomes");
   }
 
   // When the user explicitly requests tests, retain the stricter newer check
@@ -961,6 +962,14 @@ function engineeringDeliverableGaps(prompt, response, buildMode = false) {
   }
   if (buildMode) {
     if (!/\b(architecture|module|data flow)\b/i.test(answer)) gaps.push("architecture and data-flow explanation");
+    // A heading alone is not a coverage map: require an explicit
+    // requirement/feature-to-implementation relationship on the same line.
+    const hasCoverageMap = answer.split(/\r?\n/).some(line =>
+      /\b(requirement|feature|coverage)\b/i.test(line) &&
+      /(?:->|=>|\bmaps?\s+to\b|\bimplemented\s+in\b)/i.test(line) &&
+      /\b(module|file|component)\b/i.test(line)
+    );
+    if (!hasCoverageMap) gaps.push("a requirement-to-module or feature-to-file coverage map");
     if (/\b(database|schema|persist|storage)\b/.test(request) && !/\b(schema|primary key|foreign key|constraint|index|migration)\b/i.test(answer)) {
       gaps.push("concrete database schema and integrity constraints");
     }
@@ -972,7 +981,9 @@ function engineeringDeliverableGaps(prompt, response, buildMode = false) {
     }
     // Accept common numbered test formats (including "Test 1", "1.",
     // "Scenario 1" and "Acceptance test #1") instead of one brittle label.
-    const numberedTests = answer.match(/(?:^|\n)\s*(?:(?:acceptance\s+)?test(?:\s+case)?|scenario)\s*#?\s*\d+\s*[:.)-]?|(?:^|\n)\s*\d+[.)]\s+(?=(?:given|when|then|test|scenario|verify|check)\b)/gim) || [];
+    // Match one test label per physical line. Use horizontal whitespace:
+    // \s can consume newlines and skip adjacent numbered test entries.
+    const numberedTests = answer.match(/^[ \t]*(?:(?:(?:acceptance[ \t]+)?test(?:[ \t]+case)?|scenario)[ \t]*#?[ \t]*\d+[ \t]*[:.)-]?|\d+[.)][ \t]+(?=(?:given|when|then|test|scenario|verify|check)\b))/gim) || [];
     if (/\b(acceptance tests|test cases|at least eight|8 tests)\b/.test(request) && numberedTests.length < 8) {
       gaps.push("eight individually numbered acceptance tests with expected results");
     }

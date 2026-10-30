@@ -19,7 +19,7 @@ test("programming deliverables retain baseline test coverage even when tests wer
     "Write a JavaScript function that sorts records by date.",
     fence + "js\nfunction sortRecords(records) { return records.slice().sort((a,b) => a.date-b.date); }\n" + fence
   ));
-  assert.ok(gaps.some(g => /meaningful tests or expected results/.test(g)));
+  assert.ok(gaps.some(g => /meaningful tests paired with concrete assertions or expected outcomes/.test(g)));
 });
 
 test("programming deliverables pass the restored baseline when tests and expected results are present", () => {
@@ -75,6 +75,7 @@ test("app-building validator accepts eight commonly numbered acceptance tests", 
     "Database schema: stock table with primary key and quantity constraint.\n" +
     "Atomic transaction with rollback and idempotency key.\n" +
     "Offline sync queues changes and resolves conflicts.\n" +
+    "Requirement-to-module map: inventory -> stock module; persistence -> database module.\n" +
     Array.from({length:8}, (_, i) => "Test " + (i + 1) + ": verify the expected stock quantity after the operation.").join("\n") +
     "\nBuild and run with ./gradlew assembleDebug.\nassert expected stock count.";
   assert.deepEqual(Array.from(gapsFor("Build an inventory app with database, stock transactions, offline sync and at least eight acceptance tests", answer, true)), []);
