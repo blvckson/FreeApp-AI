@@ -186,6 +186,10 @@ export default {
         const buildMode = isComplexAppBuildRequest(prompt);
         const messages = [
           { role: "system", content: SYSTEM_PROMPT },
+          ...(engineeringPlan ? [{
+            role: "system",
+            content: "SOFTWARE ENGINEERING PLAN (internal task context; do not claim execution):\\n" + JSON.stringify(engineeringPlan) + "\\nUse this plan to structure the answer. Map requested work to concrete files, implement rather than merely advise when repository tools are actually available, and report uncompleted steps honestly."
+          }] : []),
           ...(buildMode ? [{
             role: "system",
             content: `COMPLEX APP-BUILDING DELIVERY CONTRACT
@@ -208,6 +212,30 @@ For substantial application requests, deliver implementation, not generic advice
         ];
 
         const complexity = assessRequestComplexity(prompt, history, sources.length, images.length);
+        const engineeringTask = isSoftwareEngineeringRequest(prompt);
+        let engineeringPlan = null;
+        if (engineeringTask && !evidenceBrief.noUsableEvidence) {
+          try {
+            const planResult = await runChatModel(env, [
+              { role: "system", content: "You are FreeApp AI's software-engineering task planner. Produce a concise, actionable implementation plan as strict JSON only. Schema: {\\"goal\\":string,\\"requirements\\":[string],\\"assumptions\\":[string],\\"files_to_inspect\\":[string],\\"implementation_steps\\":[string],\\"verification_steps\\":[string],\\"risks\\":[string]}. Do not claim repository access, edits, commits, builds, or tests. Infer likely file paths only as candidates, label assumptions, and keep scope limited to the request. Use retrieved evidence only for external technical facts." },
+              { role: "user", content: "TASK:\\n" + prompt.slice(0, 9000) + "\\n\\nRECENT CONTEXT:\\n" + history.slice(-6).map(x => x.role + ": " + x.content).join("\\n").slice(0, 5000) + "\\n\\nRESEARCH EVIDENCE:\\n" + formatIndependentEvidenceBrief(evidenceBrief).slice(0, 7000) }
+            ], { max_tokens: 1400, temperature: 0.1 });
+            const parsedPlan = parseJsonObject(planResult?.response || "");
+            if (parsedPlan && Array.isArray(parsedPlan.implementation_steps) && parsedPlan.implementation_steps.length) {
+              engineeringPlan = {
+                goal: String(parsedPlan.goal || prompt).slice(0, 500),
+                requirements: cleanPlanItems(parsedPlan.requirements),
+                assumptions: cleanPlanItems(parsedPlan.assumptions),
+                files_to_inspect: cleanPlanItems(parsedPlan.files_to_inspect),
+                implementation_steps: cleanPlanItems(parsedPlan.implementation_steps),
+                verification_steps: cleanPlanItems(parsedPlan.verification_steps),
+                risks: cleanPlanItems(parsedPlan.risks)
+              };
+            }
+          } catch {
+            // Planning is an enhancement; preserve the normal answer path if it fails.
+          }
+        }
         let responseText = "";
         let qualityReviewUsed = false;
 
@@ -286,6 +314,8 @@ For substantial application requests, deliver implementation, not generic advice
           qualityReviewUsed,
           modelIndependentFallback,
           responseMode: modelIndependentFallback ? "research-evidence-only" : "language-model",
+          engineeringTask,
+          engineeringPlan,
           complexity: complexity.level,
           sources: sources.map(s => ({ title: s.title, url: s.url }))
         });
@@ -645,6 +675,16 @@ function buildIndependentEvidenceBrief(query, sources) {
     })),
     evidence: claims.slice(0,18)
   };
+}
+
+function isSoftwareEngineeringRequest(prompt) {
+  const text = String(prompt || "").toLowerCase();
+  return /\\b(build|create|develop|implement|code|program|debug|fix|refactor|commit|deploy|compile|apk|repository|github|workflow|pull request|software|app|application|api|backend|frontend|database|test suite)\\b/.test(text);
+}
+
+function cleanPlanItems(value) {
+  if (!Array.isArray(value)) return [];
+  return value.filter(item => typeof item === "string").map(item => item.trim()).filter(Boolean).slice(0, 12).map(item => item.slice(0, 500));
 }
 
 function buildResearchOnlyFallback(prompt, brief, modelError) {
