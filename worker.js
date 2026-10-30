@@ -384,7 +384,7 @@ For substantial application requests, deliver implementation, not generic advice
 
         const engineeringTask = isSoftwareEngineeringRequest(prompt);
         let engineeringPlan = null;
-        if (engineeringTask) {
+        if (shouldUseEngineeringPlanner(prompt, buildMode)) {
           try {
             const planResult = await runChatModel(env, [
               { role: "system", content: `You are FreeApp AI's software-engineering task planner. Produce a concise, actionable implementation plan as strict JSON only. Schema: {"goal":string,"requirements":[string],"assumptions":[string],"files_to_inspect":[string],"implementation_steps":[string],"verification_steps":[string],"risks":[string]}. Do not claim repository access, edits, commits, builds, or tests. Infer likely file paths only as candidates, label assumptions, and keep scope limited to the request. Use retrieved evidence only for external technical facts. If no usable research evidence is supplied, still produce a sound plan from the task and explicitly list external facts that require later verification. Do not invent repository files or claim tool access. Keep steps testable and ordered; include rollback or compatibility checks when relevant.` },
@@ -431,6 +431,9 @@ For substantial application requests, deliver implementation, not generic advice
           const engineeringFallback = engineeringTask ? buildEngineeringFallback(prompt) : "";
           if (engineeringFallback) {
             responseText = engineeringFallback;
+            modelIndependentFallback = true;
+          } else if (codeTask || buildMode) {
+            responseText = buildProgrammingProviderFailure(prompt, modelError);
             modelIndependentFallback = true;
           } else {
             responseText = buildResearchOnlyFallback(prompt, evidenceBrief, modelError);
@@ -997,6 +1000,37 @@ function isSoftwareEngineeringRequest(prompt) {
   return /\b(build|create|develop|implement|code|program|debug|fix|refactor|commit|deploy|compile|apk|repository|github|workflow|pull request|software|app|application|api|backend|frontend|database|test suite)\b/i.test(text);
 }
 
+function shouldUseEngineeringPlanner(prompt, buildMode = false) {
+  if (buildMode) return true;
+  const text = String(prompt || "").toLowerCase();
+  // Reserve a separate planning inference for multi-file and repository-scale
+  // work. Focused functions/debugging should use the available quota on solving.
+  return /\b(?:multi[- ]file|multiple files|whole repository|entire repository|repository[- ]wide|architecture|system design|deployment pipeline|end[- ]to[- ]end app|full application|several modules|multiple components)\b/i.test(text);
+}
+
+function buildProgrammingProviderFailure(prompt, modelError) {
+  const diagnostic = String(modelError?.message || modelError || "Unknown generation failure.")
+    .replace(/(authorization\s*:\s*bearer\s+)[^\s,;]+/gi, "$1[redacted]")
+    .replace(/((?:api[_-]?key|token|secret)\s*[:=]\s*)[^\s|,;]+/gi, "$1[redacted]")
+    .replace(/([?&](?:key|api_key|token)=)[^&\s]+/gi, "$1[redacted]")
+    .replace(/\b(?:sk-[A-Za-z0-9_-]{12,}|AIza[A-Za-z0-9_-]{20,})\b/g, "[redacted credential]")
+    .replace(/https?:\/\/\S+/g, "[provider endpoint]")
+    .replace(/[\r\n]+/g, " ")
+    .slice(0, 900);
+  return [
+    "## Programming generation temporarily unavailable",
+    "I could not obtain a usable code-generation response because every configured inference provider failed. I have not substituted unrelated research results or presented unexecuted code as a solution.",
+    "",
+    "**Requested task:** " + String(prompt || "").trim().slice(0, 500),
+    "",
+    "**What happened:** " + diagnostic,
+    "",
+    "**Status:** No program was generated, compiled, or tested in this request. This is a provider availability, quota, or authentication failure—not a code-correctness result.",
+    "",
+    "Retry when at least one configured provider is reachable and has available quota."
+  ].join("\n");
+}
+
 function cleanPlanItems(value) {
   if (!Array.isArray(value)) return [];
   return value.filter(item => typeof item === "string").map(item => item.trim()).filter(Boolean).slice(0, 12).map(item => item.slice(0, 500));
@@ -1246,6 +1280,7 @@ async function runChatModel(env, messages, options = {}) {
     temperature: options.temperature ?? 0.2,
     // Code tasks receive a longer generation window; all other categories
     // keep the existing timeout budget and provider ordering.
+    programming: isProgrammingGenerationRequest(messages),
     providerTimeoutMs: isProgrammingGenerationRequest(messages) ? 22000 : 10000,
     // A full timeout is evidence that the route is not responding; do not
     // immediately spend the same long budget repeating that same request.
@@ -1253,13 +1288,45 @@ async function runChatModel(env, messages, options = {}) {
   };
 
   const providerErrors = [];
+  // For programming requests, use an explicitly configured Gemini key first.
+  // If that route fails, continue to the independent Kilo and LLM7 providers.
+  let geminiAttempted = false;
+  if (settings.programming && env.GEMINI_API_KEY) {
+    geminiAttempted = true;
+    const primaryModel = String(env.GEMINI_MODEL || "gemini-3.8-flash").trim();
+    const fallbackModel = String(env.GEMINI_FALLBACK_MODEL || "gemini-3.5-flash-lite").trim();
+    try {
+      return await runGeminiModel(env, settings, { model: primaryModel, timeoutMs: settings.providerTimeoutMs });
+    } catch (primaryError) {
+      const detail = String(primaryError?.message || primaryError);
+      providerErrors.push("Gemini primary (programming priority): " + detail.slice(0, 140));
+      const quotaExhausted = /HTTP 429|RESOURCE_EXHAUSTED|quota|rate.?limit/i.test(detail);
+      if (!quotaExhausted && fallbackModel && fallbackModel !== primaryModel) {
+        try {
+          return await runGeminiModel(env, {
+            ...settings,
+            max_tokens: Math.min(settings.max_tokens || 4096, 5000),
+            temperature: Math.min(settings.temperature ?? 0.2, 0.2)
+          }, { model: fallbackModel, timeoutMs: settings.providerTimeoutMs });
+        } catch (fallbackError) {
+          providerErrors.push("Gemini fallback (programming priority): " + String(fallbackError?.message || fallbackError).slice(0, 140));
+        }
+      } else if (quotaExhausted) {
+        providerErrors.push("Gemini fallback skipped: the configured API key quota/rate limit is exhausted.");
+      }
+    }
+  }
   // Keep anonymous-provider probing bounded. The previous implementation
   // tried eight Kilo aliases serially, so a rate-limited gateway could consume
   // nearly a minute before the request reached any other provider.
+  // Send configured credentials; otherwise retain anonymous free-tier access.
+  const kiloHeaders = env.KILO_API_KEY
+    ? { Authorization: "Bearer " + String(env.KILO_API_KEY).trim() }
+    : undefined;
   const kiloAttempts = [
-    { name: "Kilo current gateway (free)", url: "https://api.kilo.ai/api/gateway/chat/completions", model: "kilo-auto/free", timeoutMs: 10000 },
-    { name: "Kilo current gateway (efficient)", url: "https://api.kilo.ai/api/gateway/chat/completions", model: "kilo-auto/efficient", timeoutMs: 10000 },
-    { name: "Kilo compatibility gateway (free)", url: "https://ai-gateway.kilo.ai/api/v1/chat/completions", model: "kilo-auto/free", timeoutMs: 10000 }
+    { name: "Kilo current gateway (free)", url: "https://api.kilo.ai/api/gateway/chat/completions", model: "kilo-auto/free", timeoutMs: 10000, headers: kiloHeaders },
+    { name: "Kilo current gateway (efficient)", url: "https://api.kilo.ai/api/gateway/chat/completions", model: "kilo-auto/efficient", timeoutMs: 10000, headers: kiloHeaders },
+    { name: "Kilo compatibility gateway (free)", url: "https://ai-gateway.kilo.ai/api/v1/chat/completions", model: "kilo-auto/free", timeoutMs: 10000, headers: kiloHeaders }
   ];
   let kiloUnavailable = false;
   for (const provider of kiloAttempts) {
@@ -1278,7 +1345,15 @@ async function runChatModel(env, messages, options = {}) {
   }
   if (kiloUnavailable) providerErrors.push("Kilo routes skipped after an authorization or rate-limit response.");
   const anonymousProviders = [
-    { name: "LLM7", url: "https://api.llm7.io/v1/chat/completions", model: "default", timeoutMs: 10000 }
+    {
+      name: "LLM7",
+      url: "https://api.llm7.io/v1/chat/completions",
+      model: "default",
+      timeoutMs: 10000,
+      headers: env.LLM7_API_KEY
+        ? { Authorization: "Bearer " + String(env.LLM7_API_KEY).trim() }
+        : undefined
+    }
   ];
   for (const provider of anonymousProviders) {
     try {
@@ -1288,9 +1363,8 @@ async function runChatModel(env, messages, options = {}) {
     }
   }
 
-  // Gemini is attempted only after anonymous free routes. Quota-exhaustion errors
-  // are not retried against a second Gemini model because both share the same key.
-  if (env.GEMINI_API_KEY) {
+  // Non-programming requests retain the existing anonymous-first provider order.
+  if (env.GEMINI_API_KEY && !geminiAttempted) {
     const primaryModel = String(env.GEMINI_MODEL || "gemini-3.8-flash").trim();
     const fallbackModel = String(env.GEMINI_FALLBACK_MODEL || "gemini-3.5-flash-lite").trim();
     try {
@@ -1379,11 +1453,15 @@ async function runAnonymousOpenAIProvider(provider, settings) {
     try {
       const response = await fetch(provider.url, {
         method: "POST",
-        headers: { "content-type": "application/json", "accept": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          "accept": "application/json",
+          ...(provider.headers || {})
+        },
         body: JSON.stringify({
           model: provider.model,
           messages: settings.messages,
-          max_tokens: Math.min(settings.max_tokens || 4096, 4096),
+          max_tokens: Math.min(settings.max_tokens || 4096, settings.programming ? 7000 : 4096),
           temperature: settings.temperature ?? 0.2
         }),
         signal: AbortSignal.timeout(timeoutMs)
