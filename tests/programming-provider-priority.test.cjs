@@ -37,13 +37,19 @@ test("programming provider failure is explicit and sanitizes credential-like val
   assert.match(result, /No program was generated, compiled, or tested/);
 });
 
-test("programming-only routing classifier excludes debugging and app-building", () => {
+test("programming routing includes full app-building while preserving debugging paths", () => {
   const declaration = source.match(/function isFocusedCodeGenerationRequest\(messages\) \{[\s\S]*?\n\}/);
   assert.ok(declaration, "focused code-generation classifier must exist");
-  const classify = new Function("return (" + declaration[0] + ");")();
+  const classify = new Function("isComplexAppBuildRequest", "return (" + declaration[0] + ");")((prompt) => /\\b(build|create|implement|design|architect|develop|make)\\b/i.test(prompt) && /\\b(app|application|android|ios|web app|mobile app|software system|mvp)\\b/i.test(prompt));
   assert.equal(classify([{role:"user",content:"Write a Python function first_non_repeating(s)."}]), true);
+  assert.equal(classify([{role:"user",content:"Build a full Android app."}]), true);
+  assert.equal(classify([{role:"user",content:"Create a complete inventory management application with database and tests."}]), true);
   assert.equal(classify([{role:"user",content:"Debug this Python function."}]), false);
   assert.equal(classify([{role:"user",content:"Fix this JavaScript bug."}]), false);
-  assert.equal(classify([{role:"user",content:"Build a full Android app."}]), false);
   assert.equal(classify([{role:"user",content:"Explain this code."}]), false);
+});
+
+test("app-building requests receive the extended programming timeout", () => {
+  assert.match(source, /return isFocusedCodeGenerationRequest\\(messages\\) \\|\\|/);
+  assert.match(source, /providerTimeoutMs: isProgrammingGenerationRequest\\(messages\\) \\? 22000 : 10000/);
 });
