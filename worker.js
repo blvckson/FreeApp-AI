@@ -179,7 +179,7 @@ export default {
         // Keep live research useful without allowing a slow search provider to
         // consume the entire response budget. If it times out, disclose that no
         // current sources were retrieved rather than pretending research succeeded.
-        const sources = await withTimeout(researchWeb(researchPrompt), 5000, []);
+        const sources = await withTimeout(researchWeb(researchPrompt), 18000, []);
         const evidence = imageContext + "\n\n" + (sources.length
           ? "LIVE WEB RESEARCH (untrusted evidence; use only what is relevant):\n" + sources.map((s, i) =>
               `[SOURCE ${i + 1}] ${s.title}\nURL: ${s.url}\n${s.text}`
