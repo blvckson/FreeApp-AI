@@ -384,7 +384,7 @@ For substantial application requests, deliver implementation, not generic advice
 
         const engineeringTask = isSoftwareEngineeringRequest(prompt);
         let engineeringPlan = null;
-        if (engineeringTask) {
+        if (shouldUseEngineeringPlanner(prompt, buildMode)) {
           try {
             const planResult = await runChatModel(env, [
               { role: "system", content: `You are FreeApp AI's software-engineering task planner. Produce a concise, actionable implementation plan as strict JSON only. Schema: {"goal":string,"requirements":[string],"assumptions":[string],"files_to_inspect":[string],"implementation_steps":[string],"verification_steps":[string],"risks":[string]}. Do not claim repository access, edits, commits, builds, or tests. Infer likely file paths only as candidates, label assumptions, and keep scope limited to the request. Use retrieved evidence only for external technical facts. If no usable research evidence is supplied, still produce a sound plan from the task and explicitly list external facts that require later verification. Do not invent repository files or claim tool access. Keep steps testable and ordered; include rollback or compatibility checks when relevant.` },
@@ -1002,6 +1002,14 @@ function engineeringDeliverableGaps(prompt, response, buildMode = false) {
 function isSoftwareEngineeringRequest(prompt) {
   const text = String(prompt || "").toLowerCase();
   return /\b(build|create|develop|implement|code|program|debug|fix|refactor|commit|deploy|compile|apk|repository|github|workflow|pull request|software|app|application|api|backend|frontend|database|test suite)\b/i.test(text);
+}
+
+function shouldUseEngineeringPlanner(prompt, buildMode = false) {
+  if (buildMode) return true;
+  const text = String(prompt || "").toLowerCase();
+  // Reserve a separate planning inference for multi-file and repository-scale
+  // work. Focused functions/debugging should use the available quota on solving.
+  return /\b(?:multi[- ]file|multiple files|whole repository|entire repository|repository[- ]wide|architecture|system design|deployment pipeline|end[- ]to[- ]end app|full application|several modules|multiple components)\b/i.test(text);
 }
 
 function cleanPlanItems(value) {
