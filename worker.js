@@ -942,9 +942,10 @@ function engineeringDeliverableGaps(prompt, response, buildMode = false) {
   // Restore the baseline completeness gate used by the stronger earlier
   // programming/app-building path: every engineering deliverable must include
   // a test/expected-result signal, even when the prompt does not say "test".
-  const hasBaselineTestCoverage = /\b(test|assert|expected output|acceptance criteria)\b/i.test(answer);
-  if (!hasBaselineTestCoverage) {
-    gaps.push("meaningful tests or expected results for the implementation");
+  const hasTestSection = /\b(test|tests|test case|validation|acceptance criteria)\b/i.test(answer);
+  const hasExpectedBehavior = /\b(assert(?:ion)?|expect\s*\(|expected (?:output|result|behavior)|should return|should reject|should throw)\b/i.test(answer);
+  if (!hasTestSection || !hasExpectedBehavior) {
+    gaps.push("meaningful tests paired with concrete assertions or expected outcomes");
   }
 
   // When the user explicitly requests tests, retain the stricter newer check
@@ -961,6 +962,9 @@ function engineeringDeliverableGaps(prompt, response, buildMode = false) {
   }
   if (buildMode) {
     if (!/\b(architecture|module|data flow)\b/i.test(answer)) gaps.push("architecture and data-flow explanation");
+    if (!/\b(requirement|feature)\b[\s\S]{0,180}\b(module|file|component)\b|\b(requirement-to-module|requirement coverage|feature-to-module)\b/i.test(answer)) {
+      gaps.push("a requirement-to-module or feature-to-file coverage map");
+    }
     if (/\b(database|schema|persist|storage)\b/.test(request) && !/\b(schema|primary key|foreign key|constraint|index|migration)\b/i.test(answer)) {
       gaps.push("concrete database schema and integrity constraints");
     }
