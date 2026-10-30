@@ -51,5 +51,5 @@ test("programming routing includes full app-building while preserving debugging 
 
 test("app-building requests receive the extended programming timeout", () => {
   assert.match(source, /return isFocusedCodeGenerationRequest\(messages\) \|\|/);
-  assert.match(source, /providerTimeoutMs: isProgrammingGenerationRequest\(messages\) \\? 22000 : 10000/);
+  assert.match(source, /providerTimeoutMs: isProgrammingGenerationRequest\(messages\) \? 22000 : 10000/);
 });
