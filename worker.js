@@ -180,10 +180,8 @@ export default {
         // consume the entire response budget. If it times out, disclose that no
         // current sources were retrieved rather than pretending research succeeded.
         const sources = await withTimeout(researchWeb(researchPrompt), 18000, []);
-        const evidenceBrief = buildIndependentEvidenceBrief(researchPrompt, sources);\n        const evidence = imageContext + "\\n\\n" + formatIndependentEvidenceBrief(evidenceBrief); use only what is relevant):\n" + sources.map((s, i) =>
-              `[SOURCE ${i + 1}] ${s.title}\nURL: ${s.url}\n${s.text}`
-            ).join("\n\n")
-          : "LIVE WEB RESEARCH: No usable web pages were retrieved. Do not pretend that current information was verified.");
+        const evidenceBrief = buildIndependentEvidenceBrief(researchPrompt, sources);
+        const evidence = imageContext + "\n\n" + formatIndependentEvidenceBrief(evidenceBrief);
 
         const buildMode = isComplexAppBuildRequest(prompt);
         const messages = [
