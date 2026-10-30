@@ -1,7 +1,7 @@
 name: Coding Agent Validation
 on:
   pull_request:
-    paths: ["public/app.js", "public/coding-agent-guard.js", "public/index.html", "tests/**", "package.json", ".github/workflows/coding-agent-validation.yml"]
+    paths: ["worker.js", "public/app.js", "public/coding-agent-guard.js", "public/index.html", "tests/**", "package.json", ".github/workflows/coding-agent-validation.yml"]
   push:
     branches: [main]
     paths: ["public/app.js", "public/coding-agent-guard.js", "public/index.html", "tests/**", "package.json", ".github/workflows/coding-agent-validation.yml"]
@@ -15,7 +15,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Check JavaScript syntax
-        run: npm run check:js
+      - name: Check backend and frontend JavaScript syntax
+        run: node --check worker.js && npm run check:js
       - name: Run coding-agent safety tests
         run: npm test
