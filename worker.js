@@ -909,7 +909,7 @@ function engineeringDeliverableGaps(prompt, response, buildMode = false) {
   if (!hasCode) gaps.push("complete fenced code or a clear reason implementation is not applicable");
 
   const asksForTests = /\b(test|tests|testing|regression|acceptance)\b/.test(request);
-  if (asksForTests && !(/\b(assert|expect\(|assert\.|should equal|expected output)\b/i.test(answer) && /\b(test|tests|test case|acceptance)\b/i.test(answer))) {
+  if (asksForTests && !(/\b(assert|expect\(|assert\.|should equal|expected (?:output|result))\b/i.test(answer) && /\b(test|tests|test case|acceptance)\b/i.test(answer))) {
     gaps.push("executable tests with concrete assertions and expected outcomes");
   }
   if (/\b(algorithm|complexity|performance|efficient|cycle detection|graph)\b/.test(request) && !/\b(time complexity|space complexity|o\s*\([^)]*\))/i.test(answer)) {
