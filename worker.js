@@ -1257,7 +1257,7 @@ function buildProgrammingProviderFailure(prompt, error) {
     "Provider diagnostics: " + detail,
     "No code was generated, executed, compiled, or tested. I have not substituted unrelated research results or invented an implementation.",
     "Retry when a configured provider is available, or configure a working free-tier provider/API key in the deployment environment."
-  ].filter(Boolean).join("\\n\\n");
+  ].filter(Boolean).join("\n\n");
 }
 
 async function runChatModel(env, messages, options = {}) {
