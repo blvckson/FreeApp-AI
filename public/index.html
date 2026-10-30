@@ -54,19 +54,19 @@
     </section>
     <section class="card github-coder-card" id="github-coder-card">
       <h2>GitHub Coding Agent</h2>
-      <p>Ask FreeApp AI to inspect a repository, write real source changes, create a working branch, and open a pull request for review.</p>
+      <p>This is a separate, token-authorized tool—not the normal chat. It can inspect the selected repository, ask FreeApp AI to prepare code changes, commit them to a new branch, open a pull request, and report GitHub Actions checks. The normal chat cannot access your private repository or use this token.</p>
       <label for="github-repo">GitHub repository (owner/name)</label>
       <input id="github-repo" type="text" placeholder="your-account/your-repository" autocomplete="off">
       <label for="github-token">GitHub access token</label>
       <input id="github-token" type="password" placeholder="Paste a fine-grained token for this repository" autocomplete="off">
-      <p class="small">Use a fine-grained token limited to the chosen repository with Contents: Read and write and Pull requests: Read and write. Token is used only in this screen and is not sent to FreeApp AI/Cloudflare. It is not saved between sessions. Never paste a password or token into the normal AI chat.</p>
+      <p class="small">Use a fine-grained token limited to the chosen repository with Contents: Read and write, Pull requests: Read and write, and Actions: Read (to inspect build/check results). The token is sent directly from this screen to GitHub over HTTPS; it is not sent to the AI inference endpoint and is not saved by this page. Clear it when finished. Never paste a password or token into the normal AI chat.</p>
       <label for="github-coding-task">What should FreeApp AI code?</label>
       <textarea id="github-coding-task" rows="5" placeholder="Example: Fix the login crash, add tests, and preserve all existing features."></textarea>
       <div class="controls">
         <button id="github-coding-run" type="button">Code Repository & Open Pull Request</button>
         <button id="github-coding-clear" class="secondary-button" type="button">Clear Token</button>
       </div>
-      <div id="github-coding-status" class="status" aria-live="polite">No repository changes are made until you run a coding task. Changes are proposed on a new branch, not directly on the default branch.</div>
+      <div id="github-coding-status" class="status" aria-live="polite">No repository changes are made until you run a coding task. Changes are committed to a new branch and submitted as a pull request—not directly to the default branch. The agent does not merge, deploy, or publish releases. Build/test results are reported only when GitHub Actions returns evidence.</div>
       <div id="github-coding-result" class="website-result" aria-live="polite"></div>
     </section>
     <section class="card phone-control-card">
