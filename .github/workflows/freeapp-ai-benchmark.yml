@@ -108,7 +108,7 @@ jobs:
                   data.sources.some(s => /^https?:\/\//i.test(String(s.url || '')));
               }
               checks.push({ name: 'non-empty usable assistant answer', pass: answer.trim().length >= 120 });
-              checks.push({ name: 'no leaked internal tool-call markup', pass: !/<dots_function_call>|<\\|(?:tool_call|tool_response|function_call)/i.test(answer) });
+              checks.push({ name: 'no leaked internal tool-call markup', pass: !/<dots_function_call>|tool_call|tool_response|function_call|assistant to=/i.test(answer) });
               checks.push({ name: 'no provider-unavailable fallback presented as success', pass: !/all configured AI providers failed|service unavailable.*provider|AI providers? (?:are|is) unavailable/i.test(answer) });
               results.push({
                 id: item.id, httpStatus: response.status, latencyMs: Date.now() - started,
