@@ -1231,11 +1231,22 @@ function assessRequestComplexity(prompt, history, sourceCount, imageCount) {
   return { complex, level: complex ? "deep-review" : "standard" };
 }
 
+function isProgrammingGenerationRequest(messages) {
+  const userText = (messages || [])
+    .filter(message => message && message.role === "user" && typeof message.content === "string")
+    .map(message => message.content)
+    .join("\n");
+  return /```|\b(?:source code|write (?:a |an )?(?:python|javascript|typescript|java|kotlin|rust|go|c\+\+)?\s*(?:function|class|program|script)|implement (?:the |a |an )?(?:function|class|feature|algorithm)|unit tests?|test cases?|algorithm|refactor|compile error|build (?:an? )?app)\b/i.test(userText);
+}
+
 async function runChatModel(env, messages, options = {}) {
   const settings = {
     messages,
     max_tokens: options.max_tokens || 4096,
-    temperature: options.temperature ?? 0.2
+    temperature: options.temperature ?? 0.2,
+    // Code tasks receive a longer generation window; all other categories
+    // keep the existing timeout budget and provider ordering.
+    providerTimeoutMs: isProgrammingGenerationRequest(messages) ? 22000 : 10000
   };
 
   const providerErrors = [];
@@ -1280,7 +1291,7 @@ async function runChatModel(env, messages, options = {}) {
     const primaryModel = String(env.GEMINI_MODEL || "gemini-3.8-flash").trim();
     const fallbackModel = String(env.GEMINI_FALLBACK_MODEL || "gemini-3.5-flash-lite").trim();
     try {
-      return await runGeminiModel(env, settings, { model: primaryModel, timeoutMs: 12000 });
+      return await runGeminiModel(env, settings, { model: primaryModel, timeoutMs: settings.providerTimeoutMs || 12000 });
     } catch (primaryError) {
       const detail = String(primaryError?.message || primaryError);
       providerErrors.push("Gemini primary: " + detail.slice(0, 140));
@@ -1291,7 +1302,7 @@ async function runChatModel(env, messages, options = {}) {
             ...settings,
             max_tokens: Math.min(settings.max_tokens || 4096, 5000),
             temperature: Math.min(settings.temperature ?? 0.2, 0.2)
-          }, { model: fallbackModel, timeoutMs: 10000 });
+          }, { model: fallbackModel, timeoutMs: settings.providerTimeoutMs || 10000 });
         } catch (fallbackError) {
           providerErrors.push("Gemini fallback: " + String(fallbackError?.message || fallbackError).slice(0, 140));
         }
@@ -1359,7 +1370,7 @@ function extractProviderText(body) {
 }
 
 async function runAnonymousOpenAIProvider(provider, settings) {
-  const timeoutMs = Math.max(3000, Math.min(Number(provider.timeoutMs) || 12000, 30000));
+  const timeoutMs = Math.max(3000, Math.min(Number(settings.providerTimeoutMs || provider.timeoutMs) || 12000, 30000));
   let lastError;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
@@ -1402,7 +1413,7 @@ async function runPollinationsAnonymous(settings) {
   const prompt = messages.map(m => (m.role === "system" ? "Instructions: " : m.role === "assistant" ? "Assistant: " : "User: ") + m.content).join("\n\n");
   const url = "https://gen.pollinations.ai/text/" + encodeURIComponent(prompt.slice(-18000)) +
     "?model=" + encodeURIComponent("openai/gpt-oss-20b");
-  const response = await fetch(url, { signal: AbortSignal.timeout(12000) });
+  const response = await fetch(url, { signal: AbortSignal.timeout(settings.providerTimeoutMs || 12000) });
   if (!response.ok) throw new Error("HTTP " + response.status + " (anonymous generation may require authorization).");
   const answer = (await response.text()).trim();
   if (!answer) throw new Error("Provider returned an empty answer.");
