@@ -86,6 +86,7 @@ jobs:
           ];
 
           const results = [];
+          const qualityThreshold = 98;
           for (const item of cases) {
             const started = Date.now();
             try {
@@ -106,6 +107,9 @@ jobs:
                   checks.find(c => c.name === 'includes source URLs/citations').pass &&
                   data.sources.some(s => /^https?:\/\//i.test(String(s.url || '')));
               }
+              checks.push({ name: 'non-empty usable assistant answer', pass: answer.trim().length >= 120 });
+              checks.push({ name: 'no leaked internal tool-call markup', pass: !/<dots_function_call>|<\\|(?:tool_call|tool_response|function_call)/i.test(answer) });
+              checks.push({ name: 'no provider-unavailable fallback presented as success', pass: !/all configured AI providers failed|service unavailable.*provider|AI providers? (?:are|is) unavailable/i.test(answer) });
               results.push({
                 id: item.id, httpStatus: response.status, latencyMs: Date.now() - started,
                 researched: !!data.researched, sourceCount: Array.isArray(data.sources) ? data.sources.length : 0,
@@ -131,6 +135,7 @@ jobs:
             endpoint: base + '/api/generate',
             note: 'Heuristic rubric checks are a first-pass smoke test, not expert human grading or a standardized benchmark. Programming/debugging output is not compiled or executed here.',
             overallScore: Math.round(100 * passedChecks / totalChecks),
+            qualityThreshold,
             passedChecks, totalChecks,
             results
           };
@@ -143,7 +148,10 @@ jobs:
               ...((id === 'research' || id === 'complex-app-building') ? { answerExcerpt: answerExcerpt.slice(0, 1800) } : {})
             }))
           }, null, 2));
-          if (results.some(r => r.httpStatus !== 200)) process.exitCode = 1;
+          if (results.some(r => r.httpStatus !== 200) || report.overallScore < qualityThreshold || results.some(r => r.score < qualityThreshold)) {
+            console.error('QUALITY GATE FAILED: every task must score at least ' + qualityThreshold + '% and overall score must meet the same threshold.');
+            process.exitCode = 1;
+          }
           NODE
       - name: Upload benchmark report
         if: always()
