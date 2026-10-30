@@ -186,10 +186,6 @@ export default {
         const buildMode = isComplexAppBuildRequest(prompt);
         const messages = [
           { role: "system", content: SYSTEM_PROMPT },
-          ...(engineeringPlan ? [{
-            role: "system",
-            content: "SOFTWARE ENGINEERING PLAN (internal task context; do not claim execution):\\n" + JSON.stringify(engineeringPlan) + "\\nUse this plan to structure the answer. Map requested work to concrete files, implement rather than merely advise when repository tools are actually available, and report uncompleted steps honestly."
-          }] : []),
           ...(buildMode ? [{
             role: "system",
             content: `COMPLEX APP-BUILDING DELIVERY CONTRACT
@@ -235,6 +231,12 @@ For substantial application requests, deliver implementation, not generic advice
           } catch {
             // Planning is an enhancement; preserve the normal answer path if it fails.
           }
+        }
+        if (engineeringPlan) {
+          messages.splice(1, 0, {
+            role: "system",
+            content: "SOFTWARE ENGINEERING PLAN (internal task context; do not claim execution):\\n" + JSON.stringify(engineeringPlan) + "\\nUse this plan to structure the answer. Map requested work to concrete files, implement rather than merely advise when repository tools are actually available, and report uncompleted steps honestly."
+          });
         }
         let responseText = "";
         let qualityReviewUsed = false;
