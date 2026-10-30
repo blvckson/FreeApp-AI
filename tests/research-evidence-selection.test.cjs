@@ -5,9 +5,9 @@ const path = require("node:path");
 const vm = require("node:vm");
 
 const source = fs.readFileSync(path.join(__dirname, "..", "worker.js"), "utf8");
-const match = source.match(/function selectIndependentResearchSources\\([\\s\\S]*?\\n\\}/);
+const match = source.match(/function selectIndependentResearchSources\([\s\S]*?\n\}/);
 assert.ok(match, "independent source selector must exist");
-const select = vm.runInNewContext(match[0] + "\\nselectIndependentResearchSources");
+const select = vm.runInNewContext(match[0] + "\nselectIndependentResearchSources");
 
 test("research selection prefers distinct domains before duplicate publishers", () => {
   const items = [
