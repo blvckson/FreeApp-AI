@@ -1004,10 +1004,12 @@ function isFocusedCodeGenerationRequest(messages) {
   const userMessages = (messages || [])
     .filter(message => message && message.role === "user" && typeof message.content === "string");
   const text = String(userMessages[userMessages.length - 1]?.content || "");
-  // Keep debugging, repair, refactoring, app-building and repository tasks on
-  // their existing paths; this optimization is for direct code-generation asks.
-  if (/\b(?:debug|debugging|fix|repair|refactor|compile error|build (?:an? )?app|application|repository|github|workflow|deploy)\b/i.test(text)) return false;
-  return /\b(?:write|create|generate|implement|provide)\b[\s\S]{0,180}\b(?:source code|code|function|class|program|script|algorithm)\b/i.test(text);
+  // Debugging and repository maintenance keep their existing provider path.
+  if (/\b(?:debug|debugging|fix|repair|refactor|compile error|repository|github|workflow|deploy)\b/i.test(text)) return false;
+  // Full app-building is also a programming-generation task. Previously the
+  // word "application" explicitly excluded it from programming-priority routing.
+  if (isComplexAppBuildRequest(text)) return true;
+  return /\b(?:write|create|generate|implement|provide|build|develop)\b[\s\S]{0,220}\b(?:source code|code|function|class|program|script|algorithm|app|application|software|module|feature)\b/i.test(text);
 }
 
 function shouldUseEngineeringPlanner(prompt, buildMode = false) {
@@ -1281,7 +1283,8 @@ function isProgrammingGenerationRequest(messages) {
     .filter(message => message && message.role === "user" && typeof message.content === "string")
     .map(message => message.content)
     .join("\n");
-  return /```|\b(?:source code|write (?:a |an )?(?:python|javascript|typescript|java|kotlin|rust|go|c\+\+)?\s*(?:function|class|program|script)|implement (?:the |a |an )?(?:function|class|feature|algorithm)|unit tests?|test cases?|algorithm|refactor|compile error|build (?:an? )?app)\b/i.test(userText);
+  return isFocusedCodeGenerationRequest(messages) ||
+    /```|\b(?:source code|write (?:a |an )?(?:python|javascript|typescript|java|kotlin|rust|go|c\+\+)?\s*(?:function|class|program|script)|implement (?:the |a |an )?(?:function|class|feature|algorithm)|unit tests?|test cases?|algorithm|refactor|compile error|build (?:[a-z-]+\s+){0,4}(?:app|application|software system))\b/i.test(userText);
 }
 
 async function runChatModel(env, messages, options = {}) {
