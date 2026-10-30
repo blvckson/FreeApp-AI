@@ -1074,10 +1074,10 @@ function buildEngineeringFallback(prompt) {
 
 function buildProgrammingProviderFailure(prompt, modelError) {
   const diagnostic = String(modelError?.message || modelError || "Unknown generation failure.")
-    .replace(/(authorization\\s*:\\s*bearer\\s+)[^\\s,;]+/gi, "$1[redacted]")
-    .replace(/((?:api[_-]?key|token|secret)\\s*[:=]\\s*)[^\\s|,;]+/gi, "$1[redacted]")
-    .replace(/([?&](?:key|api_key|token)=)[^&\\s]+/gi, "$1[redacted]")
-    .replace(/\\b(?:sk-[A-Za-z0-9_-]{12,}|AIza[A-Za-z0-9_-]{20,})\\b/g, "[redacted credential]")
+    .replace(/(authorization\s*:\s*bearer\s+)[^\s,;]+/gi, "$1[redacted]")
+    .replace(/((?:api[_-]?key|token|secret)\s*[:=]\s*)[^\s|,;]+/gi, "$1[redacted]")
+    .replace(/([?&](?:key|api_key|token)=)[^&\s]+/gi, "$1[redacted]")
+    .replace(/\b(?:sk-[A-Za-z0-9_-]{12,}|AIza[A-Za-z0-9_-]{20,})\b/g, "[redacted credential]")
     .slice(0, 900);
   return [
     "## Programming generation temporarily unavailable",
@@ -1090,7 +1090,7 @@ function buildProgrammingProviderFailure(prompt, modelError) {
     "**Status:** No program was generated, compiled, or tested in this request. This is a provider availability, quota, or authentication failure—not a code-correctness result.",
     "",
     "Retry when at least one configured provider is reachable and has available quota."
-  ].join("\\n");
+  ].join("\n");
 }
 
 function buildResearchOnlyFallback(prompt, brief, modelError) {
