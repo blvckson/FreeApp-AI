@@ -384,7 +384,7 @@ For substantial application requests, deliver implementation, not generic advice
 
         const engineeringTask = isSoftwareEngineeringRequest(prompt);
         let engineeringPlan = null;
-        if (engineeringTask) {
+        if (shouldUseEngineeringPlanner(prompt, buildMode)) {
           try {
             const planResult = await runChatModel(env, [
               { role: "system", content: `You are FreeApp AI's software-engineering task planner. Produce a concise, actionable implementation plan as strict JSON only. Schema: {"goal":string,"requirements":[string],"assumptions":[string],"files_to_inspect":[string],"implementation_steps":[string],"verification_steps":[string],"risks":[string]}. Do not claim repository access, edits, commits, builds, or tests. Infer likely file paths only as candidates, label assumptions, and keep scope limited to the request. Use retrieved evidence only for external technical facts. If no usable research evidence is supplied, still produce a sound plan from the task and explicitly list external facts that require later verification. Do not invent repository files or claim tool access. Keep steps testable and ordered; include rollback or compatibility checks when relevant.` },
@@ -431,6 +431,9 @@ For substantial application requests, deliver implementation, not generic advice
           const engineeringFallback = engineeringTask ? buildEngineeringFallback(prompt) : "";
           if (engineeringFallback) {
             responseText = engineeringFallback;
+            modelIndependentFallback = true;
+          } else if (codeTask) {
+            responseText = buildProgrammingFailureFallback(prompt, modelError);
             modelIndependentFallback = true;
           } else {
             responseText = buildResearchOnlyFallback(prompt, evidenceBrief, modelError);
@@ -995,6 +998,34 @@ function engineeringDeliverableGaps(prompt, response, buildMode = false) {
 function isSoftwareEngineeringRequest(prompt) {
   const text = String(prompt || "").toLowerCase();
   return /\b(build|create|develop|implement|code|program|debug|fix|refactor|commit|deploy|compile|apk|repository|github|workflow|pull request|software|app|application|api|backend|frontend|database|test suite)\b/i.test(text);
+}
+
+function shouldUseEngineeringPlanner(prompt, buildMode = false) {
+  if (buildMode) return true;
+  const text = String(prompt || "").toLowerCase();
+  // A separate planning inference is useful for multi-file/repository delivery,
+  // but wastes scarce provider capacity on a small function or code question.
+  return /\b(?:multi[- ]file|multiple files|whole repository|entire repository|repository[- ]wide|architecture|system design|deployment pipeline|end[- ]to[- ]end app|full application|several modules|multiple components)\b/i.test(text);
+}
+
+function buildProgrammingFailureFallback(prompt, modelError) {
+  const detail = String(modelError?.message || modelError || "No generation provider returned a usable response.")
+    .replace(/https?:\/\/\S+/g, "[provider URL omitted]")
+    .replace(/(?:key|token|authorization)[=: ]+[^\s,;]+/gi, "credential=[redacted]")
+    .slice(0, 700);
+  return [
+    "## Code generation could not be completed",
+    "",
+    "I could not obtain a usable code-generation response from the configured providers, so I will not invent code or substitute unrelated research results.",
+    "",
+    "**Requested task:** " + String(prompt || "").trim().slice(0, 500),
+    "",
+    "**Provider diagnostic:** " + detail,
+    "",
+    "**Status:** No implementation was generated or executed. No files were changed, and no build or tests were run.",
+    "",
+    "Please retry when a generation provider is available. This failure is a provider-availability issue; it does not establish that the requested code is incorrect or impossible."
+  ].join("\n");
 }
 
 function cleanPlanItems(value) {
