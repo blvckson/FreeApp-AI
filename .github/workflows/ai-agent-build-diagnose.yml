@@ -105,13 +105,57 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload diagnostic logs and APK if produced
+      - name: Extract actionable failure details
+        if: always()
+        env:
+          JS_OUTCOME: ${{ steps.jscheck.outcome }}
+          ASSETS_OUTCOME: ${{ steps.assets.outcome }}
+          GRADLE_OUTCOME: ${{ steps.gradle.outcome }}
+        run: |
+          python3 - <<'PY'
+          import os, re
+          from pathlib import Path
+
+          patterns = re.compile(r"(?i)(error:|e: |failed|failure|exception|caused by:|could not resolve|could not find|duplicate class|manifest merger failed|unresolved reference|syntaxerror|typeerror|referenceerror)")
+          sections = [
+              ("JavaScript syntax", "js-check.log", os.getenv("JS_OUTCOME", "not run")),
+              ("Android build and tests", "gradle-agent.log", os.getenv("GRADLE_OUTCOME", "not run")),
+          ]
+          lines = [
+              "# Build failure diagnosis", "",
+              f"- JavaScript syntax: **{os.getenv('JS_OUTCOME', 'not run')}**",
+              f"- Asset preparation: **{os.getenv('ASSETS_OUTCOME', 'not run')}**",
+              f"- Android build and tests: **{os.getenv('GRADLE_OUTCOME', 'not run')}**",
+              "", "## Matching log excerpts", "",
+          ]
+          for title, filename, outcome in sections:
+              lines.extend([f"### {title} ({outcome})", ""])
+              path = Path(filename)
+              if not path.exists():
+                  lines.extend(["No log file was produced.", ""])
+                  continue
+              matches = [f"{i}: {line[:500]}" for i, line in enumerate(
+                  path.read_text(encoding="utf-8", errors="replace").splitlines(), 1
+              ) if patterns.search(line)]
+              lines.extend(matches[-40:] if matches else ["No common error signature found; inspect the complete log."])
+              lines.append("")
+          lines.extend([
+              "## Repair boundary", "",
+              "These excerpts are diagnostic hints, not proof of root cause. Review full logs and source diff before proposing a repair. This workflow does not change source files.",
+          ])
+          report = "\n".join(lines) + "\n"
+          Path("build-diagnosis.md").write_text(report, encoding="utf-8")
+          Path(os.environ["GITHUB_STEP_SUMMARY"]).write_text(report, encoding="utf-8")
+          PY
+
+      - name: Upload diagnostic logs, report, and APK if produced
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: freeapp-agent-diagnostics-${{ github.run_number }}
           if-no-files-found: warn
           path: |
+            build-diagnosis.md
             js-check.log
             gradle-agent.log
             app/build/outputs/apk/debug/app-debug.apk
