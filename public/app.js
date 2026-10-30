@@ -832,36 +832,85 @@ function toDataUrl(file) {
     });
     return commit.sha;
   }
-  async function monitorPullRequestChecks(token, repo, branch) {
-    const deadline = Date.now() + 300000;
-    let latest = null;
+  async function monitorPullRequestChecks(token, repo, branch, pullRequestNumber, commitSha) {
+    // A branch can have several workflows. Never report success from the first
+    // completed run: wait for every PR-triggered run attached to this exact commit.
+    const deadline = Date.now() + 600000;
+    let latestRuns = [];
+    let lastError = null;
     while (Date.now() < deadline) {
-      const runs = await gh(token, "/repos/" + repo + "/actions/runs?branch=" + encodeURIComponent(branch) + "&per_page=20");
-      latest = (runs.workflow_runs || []).filter(run => run.head_branch === branch)
-        .sort((a,b) => new Date(b.created_at)-new Date(a.created_at))[0] || null;
-      if (latest && latest.status === "completed") break;
-      await new Promise(resolve => setTimeout(resolve, 12000));
-    }
-    if (!latest) return { state: "not-detected", message: "No Actions run was detected for this branch." };
-    if (latest.status !== "completed") return { state: "in-progress", url: latest.html_url, message: "Checks are still running; no test result is claimed." };
-    const [jobData, artifactData] = await Promise.all([
-      gh(token, "/repos/" + repo + "/actions/runs/" + latest.id + "/jobs?per_page=50").catch(() => ({jobs:[]})),
-      gh(token, "/repos/" + repo + "/actions/runs/" + latest.id + "/artifacts?per_page=50").catch(() => ({artifacts:[]}))
-    ]);
-    const failed = (jobData.jobs || []).filter(job => job.conclusion === "failure");
-    const logReports = await Promise.all(failed.slice(0, 3).map(async job => {
       try {
-        const response = await fetch("https://api.github.com/repos/" + repo + "/actions/jobs/" + job.id + "/logs", { headers: ghHeaders(token), redirect: "follow" });
-        const raw = await response.text();
-        return { job: job.name, excerpt: raw.slice(-5000) };
-      } catch (error) { return { job: job.name, excerpt: "Could not retrieve logs: " + error.message }; }
+        const query = "/repos/" + repo + "/actions/runs?head_sha=" +
+          encodeURIComponent(commitSha) + "&per_page=100";
+        const runs = await gh(token, query);
+        latestRuns = (runs.workflow_runs || []).filter(run =>
+          run.head_sha === commitSha &&
+          (run.pull_requests || []).some(pr => Number(pr.number) === Number(pullRequestNumber))
+        );
+        if (latestRuns.length && latestRuns.every(run => run.status === "completed")) break;
+      } catch (error) {
+        lastError = error;
+      }
+      await new Promise(resolve => setTimeout(resolve, 15000));
+    }
+    if (!latestRuns.length) {
+      return {
+        state: "not-detected",
+        message: lastError
+          ? "Could not retrieve PR checks: " + lastError.message
+          : "No PR-triggered Actions runs were found for this exact commit. No passing result is claimed."
+      };
+    }
+    const pending = latestRuns.filter(run => run.status !== "completed");
+    if (pending.length) {
+      return {
+        state: "in-progress",
+        url: pending[0].html_url,
+        run_ids: latestRuns.map(run => run.id),
+        message: "The verification deadline elapsed while one or more workflows were still running. No passing result is claimed."
+      };
+    }
+
+    const runDetails = await Promise.all(latestRuns.map(async run => {
+      const [jobData, artifactData] = await Promise.all([
+        gh(token, "/repos/" + repo + "/actions/runs/" + run.id + "/jobs?per_page=100").catch(() => ({jobs:[]})),
+        gh(token, "/repos/" + repo + "/actions/runs/" + run.id + "/artifacts?per_page=100").catch(() => ({artifacts:[]}))
+      ]);
+      const failed = (jobData.jobs || []).filter(job => job.conclusion === "failure");
+      const logReports = await Promise.all(failed.slice(0, 3).map(async job => {
+        try {
+          const response = await fetch("https://api.github.com/repos/" + repo + "/actions/jobs/" + job.id + "/logs", {
+            headers: ghHeaders(token), redirect: "follow"
+          });
+          const raw = await response.text();
+          return { job: job.name, excerpt: raw.slice(-5000) };
+        } catch (error) {
+          return { job: job.name, excerpt: "Could not retrieve logs: " + error.message };
+        }
+      }));
+      return {
+        id: run.id,
+        name: run.name,
+        conclusion: run.conclusion || "unknown",
+        url: run.html_url,
+        jobs: (jobData.jobs || []).map(job => ({name:job.name,status:job.status,conclusion:job.conclusion})),
+        failed_jobs: failed.map(job => job.name),
+        failure_log_excerpts: logReports,
+        artifacts: (artifactData.artifacts || []).filter(item => !item.expired)
+          .map(item => ({name:item.name,size_in_bytes:item.size_in_bytes,download_url:item.archive_download_url}))
+      };
     }));
-    const artifacts = (artifactData.artifacts || []).filter(item => !item.expired).map(item => ({name:item.name,size_in_bytes:item.size_in_bytes,download_url:item.archive_download_url}));
+    const failures = runDetails.filter(run => run.conclusion !== "success");
     return {
-      state: latest.conclusion || "unknown", url: latest.html_url, run_id: latest.id,
-      jobs: (jobData.jobs || []).map(job => ({name:job.name,status:job.status,conclusion:job.conclusion})),
-      failed_jobs: failed.map(job => job.name), failure_log_excerpts: logReports,
-      artifacts, message: latest.conclusion === "success" ? "The detected Actions run completed successfully." : "Automated checks did not pass; failure logs and available artifacts were collected."
+      state: failures.length ? "failure" : "success",
+      url: runDetails[0]?.url,
+      run_ids: runDetails.map(run => run.id),
+      workflows: runDetails,
+      failed_jobs: runDetails.flatMap(run => run.failed_jobs),
+      artifacts: runDetails.flatMap(run => run.artifacts),
+      message: failures.length
+        ? "One or more PR workflows did not succeed. Review the per-workflow jobs and logs below."
+        : "Every detected PR-triggered workflow for this exact commit completed successfully."
     };
   }
   clearButton.addEventListener("click", () => { tokenInput.value = ""; status.textContent = "Token cleared from the input. It was not saved by FreeApp AI."; });
@@ -931,7 +980,7 @@ function toDataUrl(file) {
         body: JSON.stringify({ title: "FreeApp AI: " + (proposal.summary || task).slice(0, 180), head: branch, base, body })
       });
       status.textContent = "Pull request opened. Monitoring automated checks...";
-      const checks = await monitorPullRequestChecks(token, repo, branch).catch(error => ({state:"unknown",message:error.message}));
+      const checks = await monitorPullRequestChecks(token, repo, branch, pr.number, commitSha).catch(error => ({state:"unknown",message:error.message}));
       result.textContent = "Pull request created: " + pr.html_url + "\n\nBranch: " + branch + "\nAtomic commit: " + commitSha + "\nFiles changed: " + files.map(f => f.path).join(", ") +
         "\n\nSummary: " + (proposal.summary || "Code changes proposed.") +
         "\n\nSuggested tests: " + ((proposal.tests || []).join("; ") || "Repository Actions checks.") +
