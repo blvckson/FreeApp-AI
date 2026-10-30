@@ -2,12 +2,12 @@ name: FreeApp AI - Autonomous Repair Proposal
 
 on:
   workflow_run:
-    workflows: ["Build FreeApp AI APK"]
+    workflows: ["Build FreeApp AI APK", "FreeApp AI Agent - Build and Diagnose"]
     types: [completed]
   workflow_dispatch:
     inputs:
       run_id:
-        description: "Failed Build FreeApp AI APK run ID"
+        description: "Failed APK build or Android validation run ID"
         required: true
         type: string
 
@@ -25,7 +25,9 @@ jobs:
     if: >-
       (github.event_name == 'workflow_dispatch') ||
       (github.event.workflow_run.conclusion == 'failure' &&
-       github.event.workflow_run.head_branch == 'main')
+       (github.event.workflow_run.name == 'Build FreeApp AI APK' ||
+        (github.event.workflow_run.name == 'FreeApp AI Agent - Build and Diagnose' &&
+         github.event.workflow_run.event == 'pull_request')))
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -51,13 +53,22 @@ jobs:
           SOURCE_SHA="$(printf '%s' "$RUN_JSON" | jq -r '.head_sha // empty')"
           SOURCE_CONCLUSION="$(printf '%s' "$RUN_JSON" | jq -r '.conclusion // empty')"
           SOURCE_WORKFLOW="$(printf '%s' "$RUN_JSON" | jq -r '.name // empty')"
-          [ "$SOURCE_REPO" = "$GH_REPO" ] || { echo "Run belongs to another repository"; exit 1; }
-          [ "$SOURCE_BRANCH" = "main" ] || { echo "Only failed main-branch builds may trigger repair proposals"; exit 1; }
-          [ "$SOURCE_WORKFLOW" = "Build FreeApp AI APK" ] || { echo "Unexpected workflow; refusing to repair"; exit 1; }
-          [ "$SOURCE_CONCLUSION" = "failure" ] || { echo "Source build did not fail; no repair needed"; exit 1; }
+          SOURCE_EVENT="$(printf '%s' "$RUN_JSON" | jq -r '.event // empty')"
+          PR_BASE="$(printf '%s' "$RUN_JSON" | jq -r '.pull_requests[0].base.ref // empty')"
+          [ "$SOURCE_REPO" = "$GH_REPO" ] || { echo "Run belongs to another repository; refusing privileged repair"; exit 1; }
+          [ "$SOURCE_CONCLUSION" = "failure" ] || { echo "Source run did not fail; no repair needed"; exit 1; }
+          if [ "$SOURCE_WORKFLOW" = "Build FreeApp AI APK" ] && [ "$SOURCE_BRANCH" = "main" ]; then
+            TARGET_BRANCH="main"
+          elif [ "$SOURCE_WORKFLOW" = "FreeApp AI Agent - Build and Diagnose" ] && [ "$SOURCE_EVENT" = "pull_request" ] && [ "$PR_BASE" = "main" ]; then
+            TARGET_BRANCH="$SOURCE_BRANCH"
+          else
+            echo "Unsupported workflow/event/branch combination; refusing repair."
+            exit 1
+          fi
           echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
           echo "source_sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
           echo "source_branch=$SOURCE_BRANCH" >> "$GITHUB_OUTPUT"
+          echo "target_branch=$TARGET_BRANCH" >> "$GITHUB_OUTPUT"
 
       - name: Checkout exact failed revision
         uses: actions/checkout@v4
@@ -207,6 +218,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RUN_ID: ${{ steps.source.outputs.run_id }}
           SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
+          TARGET_BRANCH: ${{ steps.source.outputs.target_branch }}
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
