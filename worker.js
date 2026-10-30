@@ -320,8 +320,35 @@ export default {
         const evidence = imageContext + "\n\n" + formatIndependentEvidenceBrief(evidenceBrief);
 
         const buildMode = isComplexAppBuildRequest(prompt);
+        const codeTask = isSoftwareEngineeringRequest(prompt) && /\\b(code|program|debug|fix|refactor|implement|algorithm|api|backend|frontend|database|test|compile|build|app|application|software|repository|github)\\b/i.test(prompt);
+        const researchMode = /\\b(research|investigate|compare|evaluate|latest|current|evidence|sources|literature review|market analysis)\\b/i.test(prompt);
         const messages = [
           { role: "system", content: SYSTEM_PROMPT },
+          ...(researchMode ? [{
+            role: "system",
+            content: `HIGH-RIGOUR RESEARCH DELIVERY CONTRACT
+- Treat the retrieved source register and extracts as evidence to inspect, not as decoration. Read and use the actual supplied extracts.
+- Build a claim-to-source map: each important factual claim must be supported by a named source URL; do not attach a source to a claim it does not support.
+- Compare at least two genuinely independent sources when the evidence set permits. Prefer primary/official documentation for specifications and independent academic or reputable sources for evaluation.
+- Distinguish verified facts, source claims, reasoned inferences, recommendations, and unknowns. Include publication/update dates when supplied; flag stale evidence.
+- Explicitly identify disagreements, missing evidence, methodology limits, and possible bias. Never invent quotations, statistics, model IDs, study results, or citations.
+- For comparisons, use consistent criteria and a concise comparison table where useful; explain trade-offs rather than declaring an unsupported winner.
+- If fewer than two usable independent sources were retrieved, say that research coverage is insufficient and do not imply a comprehensive live review.
+- End with a source register containing only URLs actually retrieved and used.`
+          }] : []),
+          ...(codeTask ? [{
+            role: "system",
+            content: `ADVANCED PROGRAMMING AND SOFTWARE ENGINEERING CONTRACT
+- Solve the requested engineering problem, not merely describe how one might solve it. State assumptions and then provide complete, internally consistent code for the requested scope.
+- Check language/runtime versions, imports, types, interfaces, asynchronous behaviour, resource cleanup, input validation, error paths, security, and compatibility.
+- Prefer maintainable modular design; explain why the algorithm/data structures fit and state time/space complexity when relevant.
+- Cover boundary cases, concurrency/race conditions, persistence/transaction safety, and failure recovery where applicable.
+- Include executable tests with concrete inputs and expected outputs. Include normal, boundary, invalid-input, and failure cases; do not count test names without meaningful assertions.
+- For debugging, identify the precise root cause, show the corrected code, explain why the fix works, and include a regression test that would fail on the original code.
+- For application work, map requirements to files/modules and include integration points, configuration, build commands, and deployment/run instructions.
+- Do not use ellipses, TODOs, placeholder methods, or pseudocode in place of requested working code. Clearly label any unavoidable omitted external integration.
+- Never claim compilation, execution, deployment, or test success without actual evidence. Finish with a requirement-coverage checklist and clearly state what remains unverified.`
+          }] : []),
           ...(buildMode ? [{
             role: "system",
             content: `COMPLEX APP-BUILDING DELIVERY CONTRACT
@@ -395,7 +422,7 @@ For substantial application requests, deliver implementation, not generic advice
           modelIndependentFallback = true;
         }
 
-        if (responseText && !modelIndependentFallback && complexity.complex && buildMode) {
+        if (responseText && !modelIndependentFallback && complexity.complex && (buildMode || codeTask || researchMode)) {
           try {
             const review = await runChatModel(env, [
               {
@@ -409,7 +436,7 @@ For substantial application requests, deliver implementation, not generic advice
                   "\n\nEVIDENCE AVAILABLE (untrusted source material):\n" + evidence.slice(0, 10000) +
                   "\n\nList only specific errors, omissions, unsupported claims, and improvements. If the draft is already strong, say 'No material issues found.'"
               }
-            ], { max_tokens: buildMode ? 1600 : 1200, temperature: 0.1 });
+            ], { max_tokens: buildMode ? 2200 : (codeTask ? 1900 : 1500), temperature: 0.1 });
 
             const critique = (review?.response || "").trim();
             if (critique && !/^no material issues found\.?$/i.test(critique)) {
@@ -423,7 +450,7 @@ For substantial application requests, deliver implementation, not generic advice
                     "\n\nNow provide the final answer to the original request. Correct factual or logical errors, fill important omissions, follow the requested format, and keep the answer focused. Do not mention this internal review or expose private reasoning. Do not invent sources, tests, or completed actions."
                 }
               ], { max_tokens: buildMode ? 7000 : 6000, temperature: 0.15 });
-              if (revised?.response && revised.response.trim().length > 80) {
+              if (revised?.response && revised.response.trim().length > 120) {
                 responseText = revised.response.trim();
                 qualityReviewUsed = true;
               }
