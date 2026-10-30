@@ -985,7 +985,7 @@ async function runChatModel(env, messages, options = {}) {
   ];
   for (const gateway of kiloGateways) {
     for (const model of kiloModels) {
-      const provider = { name: gateway.name + " (" + model + ")", url: gateway.url, model, timeoutMs: 9000 };
+      const provider = { name: gateway.name + " (" + model + ")", url: gateway.url, model, timeoutMs: 6000 };
       try {
         return await runAnonymousOpenAIProvider(provider, settings);
       } catch (error) {
