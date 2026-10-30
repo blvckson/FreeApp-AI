@@ -67,3 +67,26 @@ test("engineering planning remains enabled when independent research retrieves n
   assert.doesNotMatch(worker, /if \(engineeringTask && !evidenceBrief\.noUsableEvidence\)/);
   assert.match(worker, /still produce a sound plan from the task/);
 });
+
+
+test("programming completeness gate requires test outcomes, not a passing mention of the word test", () => {
+  const gaps = Array.from(gapsFor(
+    "Implement a sorting function",
+    fence + "js\nfunction sortValues(values) { return [...values].sort((a,b) => a-b); }\n" + fence + "\nThis test plan covers the function."
+  ));
+  assert.ok(gaps.some(x => /assertions or expected outcomes/.test(x)));
+});
+
+test("app-building completeness gate requires a requirement-to-module coverage map", () => {
+  const answer = [
+    fence + "js", "export function saveStock() { return true; }", fence,
+    "Architecture and data flow: inventory module writes to SQLite.",
+    "Database schema: stock(id PRIMARY KEY, quantity CHECK(quantity >= 0)).",
+    "Atomic transaction with rollback and idempotency key.",
+    "Offline queue and sync reconcile conflicts with retry.",
+    ...Array.from({length:8},(_,i)=>"Acceptance test "+(i+1)+": setup, action and expected result."),
+    "Build and run with npm run build."
+  ].join("\n");
+  const gaps = Array.from(gapsFor("Build app with database stock transactions offline sync and eight acceptance tests", answer, true));
+  assert.ok(gaps.some(x => /requirement-to-module/.test(x)));
+});
