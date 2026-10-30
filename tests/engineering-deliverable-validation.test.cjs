@@ -59,3 +59,11 @@ test("app-building validation accepts a complete relevant deliverable", () => {
   ].join("\n");
   assert.deepEqual(Array.from(gapsFor("Build app with database stock transactions offline sync and eight acceptance tests", answer, true)), []);
 });
+
+
+test("engineering planning remains enabled when independent research retrieves no usable sources", () => {
+  const worker = fs.readFileSync(path.join(__dirname, "..", "worker.js"), "utf8");
+  assert.match(worker, /if \(engineeringTask\)\s*\{\s*try\s*\{\s*const planResult/);
+  assert.doesNotMatch(worker, /if \(engineeringTask && !evidenceBrief\.noUsableEvidence\)/);
+  assert.match(worker, /still produce a sound plan from the task/);
+});
