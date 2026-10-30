@@ -324,6 +324,7 @@ export default {
         const buildMode = isComplexAppBuildRequest(prompt);
         const codeTask = isSoftwareEngineeringRequest(prompt) && /\b(code|program|debug|fix|refactor|implement|algorithm|api|backend|frontend|database|test|compile|build|app|application|software|repository|github)\b/i.test(prompt);
         const researchMode = /\b(research|investigate|compare|evaluate|latest|current|evidence|sources|literature review|market analysis)\b/i.test(prompt);
+        const complexity = assessRequestComplexity(prompt, history, sources.length, images.length);
         const responseDepthGuidance = buildMode || codeTask
           ? "RESPONSE SIZE: Full deliverable. Include all requested implementation details, code, tests, validation, and run/build steps. Be readable and avoid repetition; do not omit required material to make the answer shorter."
           : researchMode || complexity.complex
@@ -381,7 +382,6 @@ For substantial application requests, deliver implementation, not generic advice
           }
         ];
 
-        const complexity = assessRequestComplexity(prompt, history, sources.length, images.length);
         const engineeringTask = isSoftwareEngineeringRequest(prompt);
         let engineeringPlan = null;
         if (engineeringTask && !evidenceBrief.noUsableEvidence) {
