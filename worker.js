@@ -961,7 +961,6 @@ function cleanPlanItems(value) {
   return value.filter(item => typeof item === "string").map(item => item.trim()).filter(Boolean).slice(0, 12).map(item => item.slice(0, 500));
 }
 
-
 function buildEngineeringFallback(prompt) {
   const text = String(prompt || "");
   const lower = text.toLowerCase();
@@ -1763,3 +1762,150 @@ async function githubRequest(token, method, path, body) {
   const text = await response.text();
   let data = {};
   try { data = text ? JSON.parse(text) : {}; } catch {}
+  if (!response.ok) throw new Error("GitHub API " + method + " " + path + " failed: " + response.status + " " + (data.message || text.slice(0, 300)));
+  return data;
+}
+
+async function importPrivateKey(pem) {
+  const clean = pem.replace(/-----BEGIN PRIVATE KEY-----/g, "")
+    .replace(/-----END PRIVATE KEY-----/g, "")
+    .replace(/\s+/g, "");
+  const bytes = Uint8Array.from(atob(clean), c => c.charCodeAt(0));
+  return crypto.subtle.importKey(
+    "pkcs8",
+    bytes.buffer,
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+}
+
+function base64url(value) {
+  return bytesToBase64url(new TextEncoder().encode(value));
+}
+
+function bytesToBase64url(bytes) {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function encodeBase64Utf8(value) {
+  return bytesToBase64(new TextEncoder().encode(value));
+}
+
+function bytesToBase64(bytes) {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(binary);
+}
+
+function decodeBase64Utf8(value) {
+  const binary = atob(value.replace(/\s/g, ""));
+  const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
+
+function encodePath(path) {
+  return path.split("/").map(encodeURIComponent).join("/");
+}
+
+function extractRequestedPaths(command, allowedPaths) {
+  const found = allowedPaths.filter(path => command.includes(path));
+  if (found.length) return found.slice(0, 5);
+
+  const lower = command.toLowerCase();
+  const paths = [];
+
+  // Narrator/voice commands need the actual voice studio files in context.
+  if (/\b(narrator|voice|voice clone|cloning|tts|text[- ]to[- ]speech)\b/.test(lower)) {
+    paths.push("public/voice/index.html", "public/voice/app.js", "public/voice/style.css");
+  }
+
+  // General application changes need the main UI and backend.
+  if (/\b(app|application|interface|ui|screen|feature|functionality|frontend|backend)\b/.test(lower)) {
+    paths.push("public/app.js", "public/index.html", "public/style.css", "worker.js");
+  }
+
+  return [...new Set(paths)].slice(0, 5);
+}
+
+function parseJsonObject(text) {
+  const cleaned = String(text).trim().replace(/^\`\`\`(?:json)?/i, "").replace(/\`\`\`$/i, "").trim();
+  try { return JSON.parse(cleaned); } catch {}
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+  if (start >= 0 && end > start) {
+    try { return JSON.parse(cleaned.slice(start, end + 1)); } catch {}
+  }
+  return null;
+}
+
+function corsHeaders() {
+  return {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, X-FreeApp-Admin-Key"
+  };
+}
+
+function json(data, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store",
+      ...corsHeaders()
+    }
+  });
+}
+
+
+function detectVerificationChallenge(url, page) {
+  const combined = (String(url || "") + " " + String(page?.title || "") + " " + String(page?.text || "")).toLowerCase();
+  const patterns = [
+    { kind: "captcha", re: /captcha|hcaptcha|recaptcha|turnstile challenge|verify you are human|prove you are human|i am not a robot/ },
+    { kind: "anti-bot", re: /checking your browser|checking if the site connection is secure|unusual traffic|automated requests|bot detection|access denied.*automated/ },
+    { kind: "login", re: /sign in to continue|log in to continue|authentication required|session expired|please log in/ }
+  ];
+  for (const item of patterns) if (item.re.test(combined)) return { detected: true, kind: item.kind };
+  return { detected: false, kind: null };
+}
+
+async function captureBrowserScreenshot(page) {
+  try {
+    const bytes = await page.screenshot({ type: "jpeg", quality: 45, fullPage: false });
+    return "data:image/jpeg;base64," + bytesToBase64(new Uint8Array(bytes));
+  } catch { return null; }
+}
+
+function validatePublicWebsiteUrl(raw) {
+  if (typeof raw !== "string" || !raw.trim()) throw new Error("Enter the full website address, including https://.");
+  let target;
+  try { target = new URL(raw.trim()); } catch { throw new Error("That website address is not valid."); }
+  if (!["http:", "https:"].includes(target.protocol)) throw new Error("Only public HTTP or HTTPS websites are supported.");
+  if (target.username || target.password) throw new Error("Do not include a username or password in the website URL.");
+  const host = target.hostname.toLowerCase();
+  if (!host || host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") ||
+      host === "metadata.google.internal" || host === "169.254.169.254" ||
+      /^(127\.|10\.|192\.168\.|0\.|169\.254\.)/.test(host) ||
+      /^172\.(1[6-9]|2[0-9]|3[01])\./.test(host) || host.includes(":")) {
+    throw new Error("Private, local-network, and link-local addresses are blocked. Use a public website address.");
+  }
+  target.hash = "";
+  return target;
+}
+
+async function readBrowserPage(page) {
+  const title = await page.title().catch(() => "");
+  const text = await page.evaluate(() => {
+    const root = document.body;
+    if (!root) return "";
+    return (root.innerText || root.textContent || "").replace(/\\n{3,}/g, "\\n\\n").trim();
+  }).catch(() => "");
+  return { title, text };
+}
