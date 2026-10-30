@@ -343,8 +343,10 @@ export default {
 - Check language/runtime versions, imports, types, interfaces, asynchronous behaviour, resource cleanup, input validation, error paths, security, and compatibility.
 - Prefer maintainable modular design; explain why the algorithm/data structures fit and state time/space complexity when relevant.
 - Cover boundary cases, concurrency/race conditions, persistence/transaction safety, and failure recovery where applicable.
-- Include executable tests with concrete inputs and expected outputs. Include normal, boundary, invalid-input, and failure cases; do not count test names without meaningful assertions.
-- For debugging, identify the precise root cause, show the corrected code, explain why the fix works, and include a regression test that would fail on the original code.
+- Include executable tests with concrete inputs, meaningful assertions, and expected outputs. Cover normal, boundary, invalid-input, and failure cases; do not count test names without assertions.
+- Provide complete, internally consistent code blocks with imports, types, helpers, and return paths; do not leave undefined identifiers or disconnected fragments.
+- For multi-file tasks, map every requested feature to exact files and keep names, signatures, schemas, and API contracts consistent across files.
+- For debugging, identify the precise root cause, show the corrected code, explain why it works, and include a regression test that would fail on the original code.
 - For application work, map requirements to files/modules and include integration points, configuration, build commands, and deployment/run instructions.
 - Do not use ellipses, TODOs, placeholder methods, or pseudocode in place of requested working code. Clearly label any unavoidable omitted external integration.
 - Never claim compilation, execution, deployment, or test success without actual evidence. Finish with a requirement-coverage checklist and clearly state what remains unverified.`
@@ -355,9 +357,10 @@ export default {
 For substantial application requests, deliver implementation, not generic advice.
 - Extract every requirement and assumption; preserve existing features and do not add unrelated work.
 - Explain architecture, data flow, and map features to concrete modules/files.
-- For build-ready requests, provide concrete code for the critical path, including imports/types, validation, persistence, error states, and integration points; do not substitute pseudocode alone.
-- Include database/schema constraints and transaction, offline, conflict and idempotency behavior where relevant.
-- Include at least eight meaningful acceptance tests covering success, edge cases, invalid input, persistence and failures.
+- For build-ready requests, provide concrete code for the critical path, including imports/types, validation, persistence, error states, and integration points; do not substitute pseudocode alone. Name the exact files to create or change and keep cross-file interfaces coherent.
+- Include database/schema constraints and transaction, offline, conflict and idempotency behavior where relevant. Separate local capabilities from features requiring a remote service.
+- Include at least eight distinct acceptance tests; each must specify setup/input, action, and expected result, covering success, edge cases, invalid input, persistence and failures.
+- Include a requirement-to-module coverage map so requested features are not silently omitted.
 - Give exact setup/build/run steps for the requested platform. Never claim code was compiled or run without evidence.
 - Before finalising, check each user requirement and clearly mark any incomplete piece.
 - Respect platform, budget, and constraints; do not assume paid services.
@@ -465,6 +468,35 @@ For substantial application requests, deliver implementation, not generic advice
         responseText = sanitizeAssistantOutput(responseText);
         if (!responseText) {
           throw new Error("The generation provider returned no usable assistant text after output validation.");
+        }
+
+        // A final deliverable gate catches obviously incomplete engineering drafts.
+        // It requests one focused repair pass; it never treats generated code as tested.
+        if (!modelIndependentFallback && (codeTask || buildMode)) {
+          const gaps = [];
+          if (!/\x60\x60\x60/.test(responseText)) gaps.push("complete fenced implementation or a clear explanation why code is not applicable");
+          if (!/\b(test|assert|expected output|acceptance criteria)\b/i.test(responseText)) gaps.push("meaningful tests with concrete expected outcomes");
+          if (buildMode && !/\b(architecture|module|data flow)\b/i.test(responseText)) gaps.push("architecture and feature-to-module mapping");
+          if (buildMode && !/\b(build|gradle|install|run)\b/i.test(responseText)) gaps.push("platform-specific build and run steps");
+          if (gaps.length) {
+            try {
+              const repair = await runChatModel(env, [
+                ...messages,
+                { role: "assistant", content: responseText.slice(0, 16000) },
+                { role: "user", content: "FINAL COMPLETENESS CHECK: revise the draft to address these omissions: " + gaps.join("; ") + ". Preserve correct material, provide complete coherent implementation rather than placeholders when code is requested, and include meaningful tests with expected outcomes. For app-building, map requirements to modules and include build/run steps. Never claim execution, compilation, or test success without actual evidence. Return the complete final answer." }
+              ], { max_tokens: buildMode ? 7000 : 6000, temperature: 0.1 });
+              const candidate = sanitizeAssistantOutput(repair?.response || "");
+              const complete = /\x60\x60\x60/.test(candidate) &&
+                /\b(test|assert|expected output|acceptance criteria)\b/i.test(candidate) &&
+                (!buildMode || (/\b(architecture|module|data flow)\b/i.test(candidate) && /\b(build|gradle|install|run)\b/i.test(candidate)));
+              if (complete && candidate.length > 120) {
+                responseText = candidate;
+                qualityReviewUsed = true;
+              }
+            } catch {
+              // Keep the original answer; provider failure must not erase a usable draft.
+            }
+          }
         }
 
         // Guarantee that retrieved sources are visible to the user even if the
@@ -1100,28 +1132,61 @@ async function runChatModel(env, messages, options = {}) {
   throw new Error("All configured AI providers failed. " + providerErrors.join(" | ").slice(0, 900));
 }
 
-async function runAnonymousOpenAIProvider(provider, settings) {
-  const response = await fetch(provider.url, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      model: provider.model,
-      messages: settings.messages,
-      max_tokens: Math.min(settings.max_tokens || 4096, 4096),
-      temperature: settings.temperature ?? 0.2
-    }),
-    signal: AbortSignal.timeout(provider.timeoutMs || 25000)
-  });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const detail = String(body?.error?.message || body?.message || body?.error || ("HTTP " + response.status));
-    throw new Error("HTTP " + response.status + ": " + detail.slice(0, 180));
+function extractProviderText(body) {
+  const values = [
+    body?.choices?.[0]?.message?.content,
+    body?.choices?.[0]?.text,
+    body?.output_text,
+    body?.response,
+    body?.content,
+    body?.message?.content
+  ];
+  for (const value of values) {
+    const text = typeof value === "string" ? value.trim()
+      : Array.isArray(value) ? value.map(part => typeof part === "string" ? part : (typeof part?.text === "string" ? part.text : "")).join("").trim()
+      : "";
+    if (text && text !== "[object Object]") return text;
   }
-  const answer = body?.choices?.[0]?.message?.content;
-  const text = typeof answer === "string" ? answer.trim()
-    : Array.isArray(answer) ? answer.map(part => typeof part?.text === "string" ? part.text : "").join("").trim() : "";
-  if (!text) throw new Error("Provider returned an empty answer.");
-  return { response: text, provider: provider.name };
+  return "";
+}
+
+async function runAnonymousOpenAIProvider(provider, settings) {
+  const timeoutMs = Math.max(3000, Math.min(Number(provider.timeoutMs) || 12000, 30000));
+  let lastError;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const response = await fetch(provider.url, {
+        method: "POST",
+        headers: { "content-type": "application/json", "accept": "application/json" },
+        body: JSON.stringify({
+          model: provider.model,
+          messages: settings.messages,
+          max_tokens: Math.min(settings.max_tokens || 4096, 4096),
+          temperature: settings.temperature ?? 0.2
+        }),
+        signal: AbortSignal.timeout(timeoutMs)
+      });
+      const raw = await response.text();
+      let body = {};
+      try { body = raw ? JSON.parse(raw) : {}; } catch {}
+      if (!response.ok) {
+        const detail = String(body?.error?.message || body?.message || body?.error || raw || ("HTTP " + response.status));
+        const error = new Error("HTTP " + response.status + ": " + detail.slice(0, 180));
+        error.status = response.status;
+        throw error;
+      }
+      const answer = extractProviderText(body);
+      if (!answer) throw new Error("Provider returned HTTP success but no usable assistant text.");
+      return { response: answer, provider: provider.name };
+    } catch (error) {
+      lastError = error;
+      const status = Number(error?.status || (String(error?.message || "").match(/HTTP (\d{3})/) || [])[1] || 0);
+      const retryable = !status || status === 408 || status === 425 || status >= 500;
+      if (attempt === 0 && retryable) await new Promise(resolve => setTimeout(resolve, 300));
+      else break;
+    }
+  }
+  throw lastError || new Error("Provider request failed without a diagnostic.");
 }
 
 async function runPollinationsAnonymous(settings) {
