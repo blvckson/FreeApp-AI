@@ -670,7 +670,12 @@ async function runChatModel(env, messages, options = {}) {
   // MiniMax model ID was removed from Kilo's live catalog and always returned 404.
   // Kilo's kilo-auto/free route selects an available free model dynamically.
   const anonymousProviders = [
-    { name: "Kilo Free", url: "https://api.kilo.ai/api/gateway/chat/completions", model: "kilo-auto/free", timeoutMs: 18000 },
+    // Current Kilo Gateway base URL. kilo-auto/free is documented as an
+    // anonymous-access model and resolves dynamically to available free models.
+    { name: "Kilo Free (current gateway)", url: "https://api.kilo.ai/api/gateway/chat/completions", model: "kilo-auto/free", timeoutMs: 18000 },
+    // Compatibility route retained in Kilo's OpenAI-compatible API reference.
+    // Try both official routes before falling back to unrelated providers.
+    { name: "Kilo Free (compatibility gateway)", url: "https://ai-gateway.kilo.ai/api/v1/chat/completions", model: "kilo-auto/free", timeoutMs: 18000 },
     { name: "LLM7", url: "https://api.llm7.io/v1/chat/completions", model: "default", timeoutMs: 12000 }
   ];
   for (const provider of anonymousProviders) {
