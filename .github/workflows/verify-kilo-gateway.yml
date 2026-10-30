@@ -30,8 +30,8 @@ jobs:
               print("MODEL_CATALOG_FAILED", repr(exc))
               sys.exit(1)
           payload = {
-              "model":"kilo-auto/free",
-              "messages":[{"role":"user","content":"Reply with exactly: FREE_GATEWAY_OK"}],
+              "model":"cohere/north-mini-code:free",
+              "messages":[{"role":"user","content":"Reply with exactly: FREE_CODE_GATEWAY_OK"}],
               "max_tokens":32,
               "temperature":0
           }
