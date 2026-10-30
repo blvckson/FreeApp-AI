@@ -1064,7 +1064,7 @@ function buildEngineeringFallback(prompt) {
 
 function buildProgrammingProviderFailure(prompt, modelError) {
   const diagnostic = String(modelError?.message || modelError || "Unknown generation failure")
-    .replace(/(?:key|token|secret|authorization)\s*[:=]\s*[^\s|]+/gi, "$1=[redacted]")
+    .replace(/(key|token|secret|authorization)\s*[:=]\s*[^\s|]+/gi, "$1=[redacted]")
     .slice(0, 900);
   return [
     "## Programming generation temporarily unavailable",
@@ -1340,8 +1340,8 @@ async function runChatModel(env, messages, options = {}) {
     }
   }
 
-  // Gemini is attempted only after anonymous free routes. Quota-exhaustion errors
-  // are not retried against a second Gemini model because both share the same key.
+  // Non-programming requests retain the original anonymous-first provider order.
+  // Quota-exhaustion errors are not retried against a second Gemini model because both share the same key.
   if (env.GEMINI_API_KEY && !geminiAttempted) {
     const primaryModel = String(env.GEMINI_MODEL || "gemini-3.8-flash").trim();
     const fallbackModel = String(env.GEMINI_FALLBACK_MODEL || "gemini-3.5-flash-lite").trim();
