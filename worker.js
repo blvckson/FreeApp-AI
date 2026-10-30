@@ -94,6 +94,67 @@ export default {
       return new Response(null, { status: 204, headers: corsHeaders() });
     }
 
+    // Read-only repository inspection for the engineering agent. This endpoint
+    // cannot write files, create branches, commit, or trigger Actions.
+    if (url.pathname === "/api/engineering/inspect") {
+      if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
+      let body;
+      try { body = await request.json(); } catch { return json({ error: "Invalid JSON request." }, 400); }
+      const task = typeof body.task === "string" ? body.task.trim() : "";
+      if (!task) return json({ error: "Describe the engineering task to inspect." }, 400);
+      if (task.length > 5000) return json({ error: "Task is too long (maximum 5000 characters)." }, 400);
+      const allowed = [
+        "worker.js", "package.json", "wrangler.toml",
+        "public/app.js", "public/index.html", "public/style.css",
+        "public/voice/index.html", "public/voice/app.js", "public/voice/style.css",
+        "app/build.gradle", "app/src/main/AndroidManifest.xml"
+      ];
+      const requested = extractRequestedPaths(task, allowed);
+      const paths = requested.length ? requested : ["public/app.js", "public/index.html", "worker.js"];
+      const headers = {
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "FreeApp-AI-Engineering-Inspector"
+      };
+      try {
+        const [commitResponse, ...fileResponses] = await Promise.all([
+          fetch("https://api.github.com/repos/blvckson/FreeApp-AI/commits/main", { headers }),
+          ...paths.map(path => fetch("https://api.github.com/repos/blvckson/FreeApp-AI/contents/" + encodePath(path) + "?ref=main", { headers }))
+        ]);
+        if (!commitResponse.ok) throw new Error("GitHub repository status request failed: " + commitResponse.status);
+        const commit = await commitResponse.json();
+        const files = [];
+        for (let i = 0; i < fileResponses.length; i++) {
+          const response = fileResponses[i];
+          if (!response.ok) {
+            files.push({ path: paths[i], available: false, error: "GitHub returned HTTP " + response.status });
+            continue;
+          }
+          const item = await response.json();
+          if (item.type !== "file" || typeof item.content !== "string") {
+            files.push({ path: paths[i], available: false, error: "Path is not a readable text file." });
+            continue;
+          }
+          const content = decodeBase64Utf8(item.content.replace(/\\s/g, ""));
+          files.push({ path: paths[i], available: true, sha: item.sha, content: content.slice(0, 24000), truncated: content.length > 24000 });
+        }
+        return json({
+          mode: "read-only",
+          repository: "blvckson/FreeApp-AI",
+          branch: "main",
+          head_sha: commit.sha,
+          head_message: commit.commit?.message || "",
+          task,
+          inspected_paths: paths,
+          files,
+          capabilities: { inspect: true, propose_changes: false, write_files: false, commit: false, build: false, merge: false },
+          next_stage: "Generate a scoped patch from these inspected files, validate it in an isolated GitHub Actions runner, and open a review pull request. No repository writes occur in this endpoint."
+        });
+      } catch (error) {
+        return json({ error: "Repository inspection failed.", detail: String(error?.message || error) }, 502);
+      }
+    }
+
     if (url.pathname === "/api/phone-plan") {
       if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
       if (!env.AI) return json({ error: "Cloudflare Workers AI binding 'AI' is not configured." }, 503);
