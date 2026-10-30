@@ -1261,10 +1261,40 @@ async function runChatModel(env, messages, options = {}) {
     temperature: options.temperature ?? 0.2,
     // Code tasks receive a longer generation window; all other categories
     // keep the existing timeout budget and provider ordering.
+    programming: isProgrammingGenerationRequest(messages),
     providerTimeoutMs: isProgrammingGenerationRequest(messages) ? 22000 : 10000
   };
 
   const providerErrors = [];
+  // Programming requests use an explicitly configured Gemini key first so
+  // anonymous gateways cannot consume the available request budget beforehand.
+  // If Gemini fails, the independent Kilo/LLM7 routes still get their turn.
+  let geminiAttempted = false;
+  if (settings.programming && env.GEMINI_API_KEY) {
+    geminiAttempted = true;
+    const primaryModel = String(env.GEMINI_MODEL || "gemini-3.8-flash").trim();
+    const fallbackModel = String(env.GEMINI_FALLBACK_MODEL || "gemini-3.5-flash-lite").trim();
+    try {
+      return await runGeminiModel(env, settings, { model: primaryModel, timeoutMs: settings.providerTimeoutMs });
+    } catch (primaryError) {
+      const detail = String(primaryError?.message || primaryError);
+      providerErrors.push("Gemini primary (programming priority): " + detail.slice(0, 140));
+      const quotaExhausted = /HTTP 429|RESOURCE_EXHAUSTED|quota|rate.?limit/i.test(detail);
+      if (!quotaExhausted && fallbackModel && fallbackModel !== primaryModel) {
+        try {
+          return await runGeminiModel(env, {
+            ...settings,
+            max_tokens: Math.min(settings.max_tokens || 4096, 5000),
+            temperature: Math.min(settings.temperature ?? 0.2, 0.2)
+          }, { model: fallbackModel, timeoutMs: settings.providerTimeoutMs });
+        } catch (fallbackError) {
+          providerErrors.push("Gemini fallback (programming priority): " + String(fallbackError?.message || fallbackError).slice(0, 140));
+        }
+      } else if (quotaExhausted) {
+        providerErrors.push("Gemini fallback skipped: the configured API key quota/rate limit is exhausted.");
+      }
+    }
+  }
   // Keep anonymous-provider probing bounded. The previous implementation
   // tried eight Kilo aliases serially, so a rate-limited gateway could consume
   // nearly a minute before the request reached any other provider.
@@ -1314,9 +1344,9 @@ async function runChatModel(env, messages, options = {}) {
     }
   }
 
-  // Gemini is attempted only after anonymous free routes. Quota-exhaustion errors
-  // are not retried against a second Gemini model because both share the same key.
-  if (env.GEMINI_API_KEY) {
+  // Non-programming requests retain the existing anonymous-first order.
+  // Quota-exhaustion errors are not retried against a second Gemini model.
+  if (env.GEMINI_API_KEY && !geminiAttempted) {
     const primaryModel = String(env.GEMINI_MODEL || "gemini-3.8-flash").trim();
     const fallbackModel = String(env.GEMINI_FALLBACK_MODEL || "gemini-3.5-flash-lite").trim();
     try {
@@ -1413,7 +1443,7 @@ async function runAnonymousOpenAIProvider(provider, settings) {
         body: JSON.stringify({
           model: provider.model,
           messages: settings.messages,
-          max_tokens: Math.min(settings.max_tokens || 4096, 4096),
+          max_tokens: Math.min(settings.max_tokens || 4096, settings.programming ? 7000 : 4096),
           temperature: settings.temperature ?? 0.2
         }),
         signal: AbortSignal.timeout(timeoutMs)
