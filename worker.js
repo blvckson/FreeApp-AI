@@ -384,10 +384,10 @@ For substantial application requests, deliver implementation, not generic advice
 
         const engineeringTask = isSoftwareEngineeringRequest(prompt);
         let engineeringPlan = null;
-        if (engineeringTask && !evidenceBrief.noUsableEvidence) {
+        if (engineeringTask) {
           try {
             const planResult = await runChatModel(env, [
-              { role: "system", content: `You are FreeApp AI's software-engineering task planner. Produce a concise, actionable implementation plan as strict JSON only. Schema: {"goal":string,"requirements":[string],"assumptions":[string],"files_to_inspect":[string],"implementation_steps":[string],"verification_steps":[string],"risks":[string]}. Do not claim repository access, edits, commits, builds, or tests. Infer likely file paths only as candidates, label assumptions, and keep scope limited to the request. Use retrieved evidence only for external technical facts.` },
+              { role: "system", content: `You are FreeApp AI's software-engineering task planner. Produce a concise, actionable implementation plan as strict JSON only. Schema: {"goal":string,"requirements":[string],"assumptions":[string],"files_to_inspect":[string],"implementation_steps":[string],"verification_steps":[string],"risks":[string]}. Do not claim repository access, edits, commits, builds, or tests. Infer likely file paths only as candidates, label assumptions, and keep scope limited to the request. Use retrieved evidence only for external technical facts. If no usable research evidence is supplied, still produce a sound plan from the task and explicitly list external facts that require later verification. Do not invent repository files or claim tool access. Keep steps testable and ordered; include rollback or compatibility checks when relevant.` },
               { role: "user", content: "TASK:\\n" + prompt.slice(0, 9000) + "\\n\\nRECENT CONTEXT:\\n" + history.slice(-6).map(x => x.role + ": " + x.content).join("\\n").slice(0, 5000) + "\\n\\nRESEARCH EVIDENCE:\\n" + formatIndependentEvidenceBrief(evidenceBrief).slice(0, 7000) }
             ], { max_tokens: 1400, temperature: 0.1 });
             const parsedPlan = parseJsonObject(planResult?.response || "");
