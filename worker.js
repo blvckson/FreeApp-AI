@@ -1008,7 +1008,7 @@ function shouldUseEngineeringPlanner(prompt, buildMode = false) {
   // Keep scarce inference capacity for the actual code answer on focused
   // single-function/debug tasks. Reserve the separate planner call for work
   // that benefits from repository-wide or multi-component coordination.
-  return /\\b(?:multi[- ]file|multiple files|whole repository|entire repository|repository[- ]wide|architecture|system design|deployment pipeline|end[- ]to[- ]end app|full application|several modules|multiple components)\\b/i.test(text);
+  return /\b(?:multi[- ]file|multiple files|whole repository|entire repository|repository[- ]wide|architecture|system design|deployment pipeline|end[- ]to[- ]end app|full application|several modules|multiple components)\b/i.test(text);
 }
 
 function cleanPlanItems(value) {
