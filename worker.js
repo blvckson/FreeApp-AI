@@ -213,13 +213,23 @@ For substantial application requests, deliver implementation, not generic advice
 
         // Spend extra inference only on tasks that benefit from deeper checking.
         // Simple questions keep the fast single-pass path.
-        const draft = await runChatModel(env, messages, {
-          max_tokens: buildMode ? 7000 : (complexity.complex ? 5000 : 4096),
-          temperature: complexity.complex ? 0.2 : 0.25
-        });
-        responseText = draft?.response || "";
+        let draft = null;
+        let modelIndependentFallback = false;
+        try {
+          draft = await runChatModel(env, messages, {
+            max_tokens: buildMode ? 7000 : (complexity.complex ? 5000 : 4096),
+            temperature: complexity.complex ? 0.2 : 0.25
+          });
+          responseText = draft?.response || "";
+        } catch (modelError) {
+          // Keep the service useful when every generation provider is down.
+          // This path synthesizes only retrieved evidence; it never pretends
+          // to be a general-purpose language model or invents implementation.
+          responseText = buildResearchOnlyFallback(prompt, evidenceBrief, modelError);
+          modelIndependentFallback = true;
+        }
 
-        if (responseText && complexity.complex && buildMode) {
+        if (responseText && !modelIndependentFallback && complexity.complex && buildMode) {
           try {
             const review = await runChatModel(env, [
               {
@@ -274,6 +284,8 @@ For substantial application requests, deliver implementation, not generic advice
           researchAttempted: true,
           researchSourceCount: sources.length,
           qualityReviewUsed,
+          modelIndependentFallback,
+          responseMode: modelIndependentFallback ? "research-evidence-only" : "language-model",
           complexity: complexity.level,
           sources: sources.map(s => ({ title: s.title, url: s.url }))
         });
@@ -633,6 +645,34 @@ function buildIndependentEvidenceBrief(query, sources) {
     })),
     evidence: claims.slice(0,18)
   };
+}
+
+function buildResearchOnlyFallback(prompt, brief, modelError) {
+  const lines = [
+    "## Independent research result",
+    "FreeApp AI's language-generation services are currently unavailable. I have therefore used the independent research evidence collected for this request instead of pretending a model-generated answer was produced.",
+    ""
+  ];
+  if (brief && brief.sourceCount && brief.evidence.length) {
+    lines.push("### What the retrieved material says");
+    const seen = new Set();
+    for (const item of brief.evidence) {
+      const key = item.text.toLowerCase().replace(/\\W+/g, " ").slice(0, 180);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      lines.push("- " + item.text + " (Source: " + item.url + ")");
+      if (seen.size >= 10) break;
+    }
+    lines.push("", "### Evidence coverage", brief.quality + "; " + brief.sourceCount + " readable sources across " + brief.sourceHosts.length + " distinct domains.");
+    lines.push("These extracts are evidence, not a complete answer. Their relevance ranking does not prove accuracy, and conflicting or missing context may change the interpretation.");
+    lines.push("", "### What remains incomplete", "The requested reasoning, code generation, or implementation could not be completed because all configured generation routes failed. No code was generated, executed, committed, or built by this fallback.");
+  } else {
+    lines.push("No readable research sources were retrieved, so I cannot responsibly construct an evidence-based answer for this request.");
+    lines.push("The generation services failed and the independent research route returned no usable source text. Please retry when a generation route is available; do not treat this response as a completed answer.");
+  }
+  const diagnostic = String(modelError?.message || modelError || "Unknown generation failure").slice(0, 650);
+  lines.push("", "### Service status", "Generation failure: " + diagnostic, "Research was attempted independently. No claim of live verification is made beyond the source register returned with this response.");
+  return lines.join("\\n");
 }
 
 function formatIndependentEvidenceBrief(brief) {
