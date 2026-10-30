@@ -999,27 +999,30 @@ async function runChatModel(env, messages, options = {}) {
   };
 
   const providerErrors = [];
-  // Try the documented anonymous-free Kilo auto router first. The old hard-coded
-  // MiniMax model ID was removed from Kilo's live catalog and always returned 404.
-  // Kilo's kilo-auto/free route selects an available free model dynamically.
-  // Kilo's auto/free alias has returned HTTP 200 with an empty assistant
-  // message in live checks. Treat that as failure and try documented router
-  // profiles before moving to another provider. Every response is validated.
-  const kiloModels = ["kilo-auto/free", "kilo-auto/efficient", "kilo-auto/balanced", "kilo-auto/small"];
-  const kiloGateways = [
-    { name: "Kilo current gateway", url: "https://api.kilo.ai/api/gateway/chat/completions" },
-    { name: "Kilo compatibility gateway", url: "https://ai-gateway.kilo.ai/api/v1/chat/completions" }
+  // Keep anonymous-provider probing bounded. The previous implementation
+  // tried eight Kilo aliases serially, so a rate-limited gateway could consume
+  // nearly a minute before the request reached any other provider.
+  const kiloAttempts = [
+    { name: "Kilo current gateway (free)", url: "https://api.kilo.ai/api/gateway/chat/completions", model: "kilo-auto/free", timeoutMs: 10000 },
+    { name: "Kilo current gateway (efficient)", url: "https://api.kilo.ai/api/gateway/chat/completions", model: "kilo-auto/efficient", timeoutMs: 10000 },
+    { name: "Kilo compatibility gateway (free)", url: "https://ai-gateway.kilo.ai/api/v1/chat/completions", model: "kilo-auto/free", timeoutMs: 10000 }
   ];
-  for (const gateway of kiloGateways) {
-    for (const model of kiloModels) {
-      const provider = { name: gateway.name + " (" + model + ")", url: gateway.url, model, timeoutMs: 6000 };
-      try {
-        return await runAnonymousOpenAIProvider(provider, settings);
-      } catch (error) {
-        providerErrors.push(provider.name + ": " + String(error?.message || error).slice(0, 110));
+  let kiloUnavailable = false;
+  for (const provider of kiloAttempts) {
+    try {
+      return await runAnonymousOpenAIProvider(provider, settings);
+    } catch (error) {
+      const detail = String(error?.message || error);
+      providerErrors.push(provider.name + ": " + detail.slice(0, 140));
+      // A 429 applies to the gateway/account/IP, not just this model alias.
+      // Do not waste more sequential requests against the same throttled route.
+      if (/HTTP (?:401|403|429)\b|rate.?limit|too many requests|quota/i.test(detail)) {
+        kiloUnavailable = true;
+        break;
       }
     }
   }
+  if (kiloUnavailable) providerErrors.push("Kilo routes skipped after an authorization or rate-limit response.");
   const anonymousProviders = [
     { name: "LLM7", url: "https://api.llm7.io/v1/chat/completions", model: "default", timeoutMs: 10000 }
   ];
