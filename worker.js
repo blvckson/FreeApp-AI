@@ -433,7 +433,14 @@ For substantial application requests, deliver implementation, not generic advice
             responseText = engineeringFallback;
             modelIndependentFallback = true;
           } else {
-            responseText = buildResearchOnlyFallback(prompt, evidenceBrief, modelError);
+            // Do not feed unrelated web-search snippets into a programming task
+            // as if they were a generated solution. A clear provider diagnostic
+            // is safer than plausible-looking but irrelevant code or research.
+            if (codeTask || buildMode) {
+              responseText = "I couldn't generate or verify the requested code because every configured inference provider failed. No code was generated, executed, committed, or built. Provider diagnostics: " + String(modelError?.message || modelError).slice(0, 900) + "\\n\\nPlease check the configured Kilo/LLM7 credentials and provider quota, then retry.";
+            } else {
+              responseText = buildResearchOnlyFallback(prompt, evidenceBrief, modelError);
+            }
             modelIndependentFallback = true;
           }
         }
@@ -1253,10 +1260,16 @@ async function runChatModel(env, messages, options = {}) {
   // Keep anonymous-provider probing bounded. The previous implementation
   // tried eight Kilo aliases serially, so a rate-limited gateway could consume
   // nearly a minute before the request reached any other provider.
+  // Use configured credentials when present. Previously KILO_API_KEY and
+  // LLM7_API_KEY were checked by the setup gate but never sent to their APIs,
+  // so a configured account could still be treated as anonymous and rejected.
+  const kiloHeaders = env.KILO_API_KEY
+    ? { Authorization: "Bearer " + String(env.KILO_API_KEY).trim() }
+    : undefined;
   const kiloAttempts = [
-    { name: "Kilo current gateway (free)", url: "https://api.kilo.ai/api/gateway/chat/completions", model: "kilo-auto/free", timeoutMs: 10000 },
-    { name: "Kilo current gateway (efficient)", url: "https://api.kilo.ai/api/gateway/chat/completions", model: "kilo-auto/efficient", timeoutMs: 10000 },
-    { name: "Kilo compatibility gateway (free)", url: "https://ai-gateway.kilo.ai/api/v1/chat/completions", model: "kilo-auto/free", timeoutMs: 10000 }
+    { name: "Kilo current gateway (free)", url: "https://api.kilo.ai/api/gateway/chat/completions", model: "kilo-auto/free", timeoutMs: 10000, headers: kiloHeaders },
+    { name: "Kilo current gateway (efficient)", url: "https://api.kilo.ai/api/gateway/chat/completions", model: "kilo-auto/efficient", timeoutMs: 10000, headers: kiloHeaders },
+    { name: "Kilo compatibility gateway (free)", url: "https://ai-gateway.kilo.ai/api/v1/chat/completions", model: "kilo-auto/free", timeoutMs: 10000, headers: kiloHeaders }
   ];
   let kiloUnavailable = false;
   for (const provider of kiloAttempts) {
@@ -1275,7 +1288,15 @@ async function runChatModel(env, messages, options = {}) {
   }
   if (kiloUnavailable) providerErrors.push("Kilo routes skipped after an authorization or rate-limit response.");
   const anonymousProviders = [
-    { name: "LLM7", url: "https://api.llm7.io/v1/chat/completions", model: "default", timeoutMs: 10000 }
+    {
+      name: "LLM7",
+      url: "https://api.llm7.io/v1/chat/completions",
+      model: "default",
+      timeoutMs: 10000,
+      headers: env.LLM7_API_KEY
+        ? { Authorization: "Bearer " + String(env.LLM7_API_KEY).trim() }
+        : undefined
+    }
   ];
   for (const provider of anonymousProviders) {
     try {
@@ -1376,7 +1397,11 @@ async function runAnonymousOpenAIProvider(provider, settings) {
     try {
       const response = await fetch(provider.url, {
         method: "POST",
-        headers: { "content-type": "application/json", "accept": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          "accept": "application/json",
+          ...(provider.headers || {})
+        },
         body: JSON.stringify({
           model: provider.model,
           messages: settings.messages,
