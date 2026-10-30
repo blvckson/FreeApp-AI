@@ -432,6 +432,11 @@ For substantial application requests, deliver implementation, not generic advice
           if (engineeringFallback) {
             responseText = engineeringFallback;
             modelIndependentFallback = true;
+          } else if (codeTask) {
+            // Do not turn unrelated search snippets into a fake programming
+            // answer when every inference provider is unavailable.
+            responseText = buildProgrammingProviderFailure(prompt, modelError);
+            modelIndependentFallback = true;
           } else {
             responseText = buildResearchOnlyFallback(prompt, evidenceBrief, modelError);
             modelIndependentFallback = true;
@@ -1057,6 +1062,24 @@ function buildEngineeringFallback(prompt) {
   return "";
 }
 
+function buildProgrammingProviderFailure(prompt, modelError) {
+  const diagnostic = String(modelError?.message || modelError || "Unknown generation failure")
+    .replace(/(?:key|token|secret|authorization)\s*[:=]\s*[^\s|]+/gi, "$1=[redacted]")
+    .slice(0, 900);
+  return [
+    "## Programming generation temporarily unavailable",
+    "I could not obtain a usable code-generation response because every configured inference provider failed. I have not substituted unrelated research results or presented unexecuted code as a solution.",
+    "",
+    "**Requested task:** " + String(prompt || "").trim().slice(0, 500),
+    "",
+    "**What happened:** " + diagnostic,
+    "",
+    "**Status:** No program was generated, compiled, or tested in this request. This is a provider availability/quota/authentication failure, not a failed code-correctness test.",
+    "",
+    "Retry when at least one configured provider is reachable and has available quota. The programming route now prioritizes an explicitly configured Gemini provider and allows a larger output budget for code; other provider routes remain available as fallbacks."
+  ].join("\n");
+}
+
 function buildResearchOnlyFallback(prompt, brief, modelError) {
   const diagnostic = String(modelError?.message || modelError || "Unknown generation failure").slice(0, 650);
   if (/mediaprojection/.test(String(prompt || "").toLowerCase()) && /android/.test(String(prompt || "").toLowerCase())) {
@@ -1246,10 +1269,42 @@ async function runChatModel(env, messages, options = {}) {
     temperature: options.temperature ?? 0.2,
     // Code tasks receive a longer generation window; all other categories
     // keep the existing timeout budget and provider ordering.
+    programming: isProgrammingGenerationRequest(messages),
     providerTimeoutMs: isProgrammingGenerationRequest(messages) ? 22000 : 10000
   };
 
   const providerErrors = [];
+  // For programming requests, try an explicitly configured Gemini key first.
+  // This avoids spending the whole request budget probing anonymous gateways
+  // before reaching the user's configured inference provider. A quota/auth
+  // failure is recorded and the normal independent-provider fallback continues.
+  let geminiAttempted = false;
+  if (settings.programming && env.GEMINI_API_KEY) {
+    geminiAttempted = true;
+    const primaryModel = String(env.GEMINI_MODEL || "gemini-3.8-flash").trim();
+    const fallbackModel = String(env.GEMINI_FALLBACK_MODEL || "gemini-3.5-flash-lite").trim();
+    try {
+      return await runGeminiModel(env, settings, { model: primaryModel, timeoutMs: settings.providerTimeoutMs });
+    } catch (primaryError) {
+      const detail = String(primaryError?.message || primaryError);
+      providerErrors.push("Gemini primary (programming priority): " + detail.slice(0, 140));
+      const quotaExhausted = /HTTP 429|RESOURCE_EXHAUSTED|quota|rate.?limit/i.test(detail);
+      if (!quotaExhausted && fallbackModel && fallbackModel !== primaryModel) {
+        try {
+          return await runGeminiModel(env, {
+            ...settings,
+            max_tokens: Math.min(settings.max_tokens || 4096, 5000),
+            temperature: Math.min(settings.temperature ?? 0.2, 0.2)
+          }, { model: fallbackModel, timeoutMs: settings.providerTimeoutMs });
+        } catch (fallbackError) {
+          providerErrors.push("Gemini fallback (programming priority): " + String(fallbackError?.message || fallbackError).slice(0, 140));
+        }
+      } else if (quotaExhausted) {
+        providerErrors.push("Gemini fallback skipped: the configured API key quota/rate limit is exhausted.");
+      }
+    }
+  }
+
   // Keep anonymous-provider probing bounded. The previous implementation
   // tried eight Kilo aliases serially, so a rate-limited gateway could consume
   // nearly a minute before the request reached any other provider.
@@ -1287,7 +1342,7 @@ async function runChatModel(env, messages, options = {}) {
 
   // Gemini is attempted only after anonymous free routes. Quota-exhaustion errors
   // are not retried against a second Gemini model because both share the same key.
-  if (env.GEMINI_API_KEY) {
+  if (env.GEMINI_API_KEY && !geminiAttempted) {
     const primaryModel = String(env.GEMINI_MODEL || "gemini-3.8-flash").trim();
     const fallbackModel = String(env.GEMINI_FALLBACK_MODEL || "gemini-3.5-flash-lite").trim();
     try {
@@ -1380,7 +1435,7 @@ async function runAnonymousOpenAIProvider(provider, settings) {
         body: JSON.stringify({
           model: provider.model,
           messages: settings.messages,
-          max_tokens: Math.min(settings.max_tokens || 4096, 4096),
+          max_tokens: Math.min(settings.max_tokens || 4096, settings.programming ? 7000 : 4096),
           temperature: settings.temperature ?? 0.2
         }),
         signal: AbortSignal.timeout(timeoutMs)
