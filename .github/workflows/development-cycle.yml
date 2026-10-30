@@ -173,7 +173,7 @@ jobs:
           exit 1
 
       - name: Request autonomous repair proposal when validation fails
-        if: steps.checks.outputs.conclusion != 'success' && steps.checks.outputs.run_id != ''
+        if: failure() && steps.checks.outputs.conclusion != 'success' && steps.checks.outputs.run_id != ''
         id: repair
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
