@@ -1246,7 +1246,10 @@ async function runChatModel(env, messages, options = {}) {
     temperature: options.temperature ?? 0.2,
     // Code tasks receive a longer generation window; all other categories
     // keep the existing timeout budget and provider ordering.
-    providerTimeoutMs: isProgrammingGenerationRequest(messages) ? 22000 : 10000
+    providerTimeoutMs: isProgrammingGenerationRequest(messages) ? 22000 : 10000,
+    // A full timeout is evidence that the route is not responding; do not
+    // immediately spend the same long budget repeating that same request.
+    retryNetworkTimeouts: !isProgrammingGenerationRequest(messages)
   };
 
   const providerErrors = [];
@@ -1400,7 +1403,8 @@ async function runAnonymousOpenAIProvider(provider, settings) {
     } catch (error) {
       lastError = error;
       const status = Number(error?.status || (String(error?.message || "").match(/HTTP (\d{3})/) || [])[1] || 0);
-      const retryable = !status || status === 408 || status === 425 || status >= 500;
+      const timedOut = /timeout|timed out|aborted/i.test(String(error?.message || error));
+      const retryable = status === 408 || status === 425 || status >= 500 || (!status && !timedOut && settings.retryNetworkTimeouts !== false);
       if (attempt === 0 && retryable) await new Promise(resolve => setTimeout(resolve, 300));
       else break;
     }
