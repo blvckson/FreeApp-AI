@@ -1172,10 +1172,10 @@ async function runGeminiModel(env, settings, options = {}) {
 
 function sanitizeAssistantOutput(value) {
   return String(value || "")
-    .replace(/<dots_function_call>[\\s\\S]*?<\\/dots_function_call>/gi, "")
-    .replace(/<\\|(?:tool_call|tool_response|function_call)[^>]*\\|>[\\s\\S]*?(?=<\\||$)/gi, "")
-    .replace(/^\\s*(?:tool|assistant to=[^\\n]+|<\\|.*?\\|>)\\s*$/gim, "")
-    .replace(/\\n{3,}/g, "\\n\\n")
+    .replace(/<dots_function_call>[\s\S]*?<\/dots_function_call>/gi, "")
+    .replace(/<\|(?:tool_call|tool_response|function_call)[^>]*\|>[\s\S]*?(?=<\||$)/gi, "")
+    .replace(/^\s*(?:tool|assistant to=[^\n]+|<\|.*?\|>)\s*$/gim, "")
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
 
