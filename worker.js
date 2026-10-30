@@ -432,7 +432,7 @@ For substantial application requests, deliver implementation, not generic advice
           if (engineeringFallback) {
             responseText = engineeringFallback;
             modelIndependentFallback = true;
-          } else if (codeTask || buildMode) {
+          } else if (isFocusedCodeGenerationRequest(messages)) {
             responseText = buildProgrammingProviderFailure(prompt, modelError);
             modelIndependentFallback = true;
           } else {
@@ -1000,11 +1000,22 @@ function isSoftwareEngineeringRequest(prompt) {
   return /\b(build|create|develop|implement|code|program|debug|fix|refactor|commit|deploy|compile|apk|repository|github|workflow|pull request|software|app|application|api|backend|frontend|database|test suite)\b/i.test(text);
 }
 
+function isFocusedCodeGenerationRequest(messages) {
+  const userMessages = (messages || [])
+    .filter(message => message && message.role === "user" && typeof message.content === "string");
+  const text = String(userMessages[userMessages.length - 1]?.content || "");
+  // Keep debugging, repair, refactoring, app-building and repository tasks on
+  // their existing paths; this optimization is for direct code-generation asks.
+  if (/\b(?:debug|debugging|fix|repair|refactor|compile error|build (?:an? )?app|application|repository|github|workflow|deploy)\b/i.test(text)) return false;
+  return /\b(?:write|create|generate|implement|provide)\b[\s\S]{0,180}\b(?:source code|code|function|class|program|script|algorithm)\b/i.test(text);
+}
+
 function shouldUseEngineeringPlanner(prompt, buildMode = false) {
   if (buildMode) return true;
   const text = String(prompt || "").toLowerCase();
-  // Reserve a separate planning inference for multi-file and repository-scale
-  // work. Focused functions/debugging should use the available quota on solving.
+  // Preserve the existing planner for debugging, repair and integration work.
+  if (/\b(?:debug|debugging|fix|repair|refactor|compile error|build|app|application|repository|github|workflow|deploy|api integration)\b/i.test(text)) return true;
+  // A focused code-generation request does not need a separate planning call.
   return /\b(?:multi[- ]file|multiple files|whole repository|entire repository|repository[- ]wide|architecture|system design|deployment pipeline|end[- ]to[- ]end app|full application|several modules|multiple components)\b/i.test(text);
 }
 
@@ -1280,7 +1291,7 @@ async function runChatModel(env, messages, options = {}) {
     temperature: options.temperature ?? 0.2,
     // Code tasks receive a longer generation window; all other categories
     // keep the existing timeout budget and provider ordering.
-    programming: isProgrammingGenerationRequest(messages),
+    programming: isFocusedCodeGenerationRequest(messages),
     providerTimeoutMs: isProgrammingGenerationRequest(messages) ? 22000 : 10000,
     // A full timeout is evidence that the route is not responding; do not
     // immediately spend the same long budget repeating that same request.
