@@ -836,7 +836,7 @@ function selectIndependentResearchSources(rankedItems, limit = 8, perDomainLimit
     if (selected.length >= maxItems) return selected;
   }
 
-  // Second pass: add another useful page from an already represented domain
+  // Second pass: add another relevant page from an already represented domain
   // only when additional independent domains were not available.
   for (const item of items) {
     if (!item || !Array.isArray(item.relevant) || item.relevant.length === 0) continue;
@@ -845,6 +845,22 @@ function selectIndependentResearchSources(rankedItems, limit = 8, perDomainLimit
     selected.push(item);
     counts.set(item.host, count + 1);
     if (selected.length >= maxItems) break;
+  }
+
+  // Restore the previous source-coverage behaviour as a context-only fallback:
+  // if strict sentence matching leaves fewer than two sources, retain readable
+  // ranked pages in the source register. Their text is NOT promoted to claims;
+  // only query-matched sentences above can support factual evidence.
+  const minimumCoverage = Math.min(2, maxItems);
+  if (selected.length < minimumCoverage) {
+    for (const item of items) {
+      if (!item || !item.host || selected.includes(item)) continue;
+      const count = counts.get(item.host) || 0;
+      if (count >= maxPerDomain) continue;
+      selected.push({ ...item, relevant: Array.isArray(item.relevant) ? item.relevant : [], contextOnly: true });
+      counts.set(item.host, count + 1);
+      if (selected.length >= minimumCoverage) break;
+    }
   }
   return selected;
 }
@@ -897,11 +913,17 @@ function buildIndependentEvidenceBrief(query, sources) {
   }
   claims.sort((a,b) => b.hits-a.hits);
   const independentHosts = new Set(claims.map(x => x.host));
-  const quality = chosen.length >= 4 && independentHosts.size >= 3 ? "broader multi-source coverage"
-    : chosen.length >= 2 ? "limited multi-source coverage" : "weak or insufficient retrieved evidence";
+  const contextOnlySourceCount = chosen.filter(x => x.contextOnly || !x.relevant.length).length;
+  const evidenceSourceCount = chosen.length - contextOnlySourceCount;
+  const quality = evidenceSourceCount >= 4 && independentHosts.size >= 3 ? "broader multi-source coverage"
+    : evidenceSourceCount >= 2 ? "limited multi-source coverage"
+    : contextOnlySourceCount ? "limited source coverage; some pages are context-only"
+    : "weak or insufficient retrieved evidence";
 
   return {
     sourceCount: chosen.length,
+    evidenceSourceCount,
+    contextOnlySourceCount,
     sourceHosts: [...new Set(chosen.map(x => x.host))],
     quality,
     sources: chosen.map((x,i) => ({
@@ -921,6 +943,16 @@ function engineeringDeliverableGaps(prompt, response, buildMode = false) {
   const hasCode = /```[a-z0-9_-]*\n[\s\S]+?```/i.test(answer);
   if (!hasCode) gaps.push("complete fenced code or a clear reason implementation is not applicable");
 
+  // Restore the baseline completeness gate used by the stronger earlier
+  // programming/app-building path: every engineering deliverable must include
+  // a test/expected-result signal, even when the prompt does not say "test".
+  const hasBaselineTestCoverage = /\b(test|assert|expected output|acceptance criteria)\b/i.test(answer);
+  if (!hasBaselineTestCoverage) {
+    gaps.push("meaningful tests or expected results for the implementation");
+  }
+
+  // When the user explicitly requests tests, retain the stricter newer check
+  // for concrete assertions rather than weakening that improvement.
   const asksForTests = /\b(test|tests|testing|regression|acceptance)\b/.test(request);
   if (asksForTests && !(/\b(assert|expect\(|assert\.|should equal|expected (?:output|result))\b/i.test(answer) && /\b(test|tests|test case|acceptance)\b/i.test(answer))) {
     gaps.push("executable tests with concrete assertions and expected outcomes");
