@@ -55,3 +55,27 @@ test("research source selection does not label context-only pages as evidence cl
   assert.ok(selected.every(item => item.contextOnly === true));
   assert.ok(selected.every(item => item.relevant.length === 0));
 });
+
+
+test("research restores broad source-register coverage without promoting context-only pages to evidence", () => {
+  const selected = Array.from(selectSources([
+    { host: "evidence.example", title: "Evidence", url: "https://evidence.example", score: 10, relevant: [{sentence:"A relevant verified sentence.",hits:2}] },
+    { host: "context-a.example", title: "Context A", url: "https://context-a.example", score: 9, relevant: [] },
+    { host: "context-b.example", title: "Context B", url: "https://context-b.example", score: 8, relevant: [] },
+    { host: "context-c.example", title: "Context C", url: "https://context-c.example", score: 7, relevant: [] }
+  ], 4, 2));
+  assert.equal(selected.length, 4);
+  assert.equal(selected[0].host, "evidence.example");
+  assert.ok(selected.slice(1).every(item => item.contextOnly === true && item.relevant.length === 0));
+});
+
+test("app-building validator accepts eight commonly numbered acceptance tests", () => {
+  const answer = fence + "kotlin\\nfun saveStock() = true\\n" + fence + "\\n" +
+    "Architecture and data flow: inventory module writes to SQLite.\\n" +
+    "Database schema: stock table with primary key and quantity constraint.\\n" +
+    "Atomic transaction with rollback and idempotency key.\\n" +
+    "Offline sync queues changes and resolves conflicts.\\n" +
+    Array.from({length:8}, (_, i) => "Test " + (i + 1) + ": verify the expected stock quantity after the operation.").join("\\n") +
+    "\\nBuild and run with ./gradlew assembleDebug.\\nassert expected stock count.";
+  assert.deepEqual(Array.from(gapsFor("Build an inventory app with database, stock transactions, offline sync and at least eight acceptance tests", answer, true)), []);
+});
