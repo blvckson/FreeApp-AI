@@ -50,7 +50,7 @@ test("app-building validation accepts a complete relevant deliverable", () => {
     fence + "js",
     "export function saveStock() { return true; }",
     fence,
-    "Architecture and data flow: inventory module calls the database.",
+    "Architecture and data flow: inventory module calls the database.\nRequirement-to-module map: stock tracking -> inventory module; persistence -> database module.",
     "Database schema: stock(id PRIMARY KEY, quantity CHECK(quantity >= 0)).",
     "Atomic transaction with rollback and idempotency key prevents duplicate stock changes.",
     "Offline queue and sync reconcile conflicts with retry.",
@@ -80,7 +80,7 @@ test("programming completeness gate requires test outcomes, not a passing mentio
 test("app-building completeness gate requires a requirement-to-module coverage map", () => {
   const answer = [
     fence + "js", "export function saveStock() { return true; }", fence,
-    "Architecture and data flow: inventory module writes to SQLite.",
+    "Architecture and data flow: inventory module writes to SQLite.",\n    "Requirement-to-module map: stock tracking -> inventory module; persistence -> database module.",
     "Database schema: stock(id PRIMARY KEY, quantity CHECK(quantity >= 0)).",
     "Atomic transaction with rollback and idempotency key.",
     "Offline queue and sync reconcile conflicts with retry.",
