@@ -962,9 +962,14 @@ function engineeringDeliverableGaps(prompt, response, buildMode = false) {
   }
   if (buildMode) {
     if (!/\b(architecture|module|data flow)\b/i.test(answer)) gaps.push("architecture and data-flow explanation");
-    if (!/\b(requirement|feature)\b[\s\S]{0,180}\b(module|file|component)\b|\b(requirement-to-module|requirement coverage|feature-to-module)\b/i.test(answer)) {
-      gaps.push("a requirement-to-module or feature-to-file coverage map");
-    }
+    // A heading alone is not a coverage map: require an explicit
+    // requirement/feature-to-implementation relationship on the same line.
+    const hasCoverageMap = answer.split(/\r?\n/).some(line =>
+      /\b(requirement|feature|coverage)\b/i.test(line) &&
+      /(?:->|=>|\bmaps?\s+to\b|\bimplemented\s+in\b)/i.test(line) &&
+      /\b(module|file|component)\b/i.test(line)
+    );
+    if (!hasCoverageMap) gaps.push("a requirement-to-module or feature-to-file coverage map");
     if (/\b(database|schema|persist|storage)\b/.test(request) && !/\b(schema|primary key|foreign key|constraint|index|migration)\b/i.test(answer)) {
       gaps.push("concrete database schema and integrity constraints");
     }
@@ -976,7 +981,9 @@ function engineeringDeliverableGaps(prompt, response, buildMode = false) {
     }
     // Accept common numbered test formats (including "Test 1", "1.",
     // "Scenario 1" and "Acceptance test #1") instead of one brittle label.
-    const numberedTests = answer.match(/(?:^|\n)\s*(?:(?:acceptance\s+)?test(?:\s+case)?|scenario)\s*#?\s*\d+\s*[:.)-]?|(?:^|\n)\s*\d+[.)]\s+(?=(?:given|when|then|test|scenario|verify|check)\b)/gim) || [];
+    // Match one test label per physical line. Use horizontal whitespace:
+    // \s can consume newlines and skip adjacent numbered test entries.
+    const numberedTests = answer.match(/^[ \t]*(?:(?:(?:acceptance[ \t]+)?test(?:[ \t]+case)?|scenario)[ \t]*#?[ \t]*\d+[ \t]*[:.)-]?|\d+[.)][ \t]+(?=(?:given|when|then|test|scenario|verify|check)\b))/gim) || [];
     if (/\b(acceptance tests|test cases|at least eight|8 tests)\b/.test(request) && numberedTests.length < 8) {
       gaps.push("eight individually numbered acceptance tests with expected results");
     }
