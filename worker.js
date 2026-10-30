@@ -414,6 +414,7 @@ For substantial application requests, deliver implementation, not generic advice
         }
         let responseText = "";
         let qualityReviewUsed = false;
+        let programmingProviderUnavailable = false;
 
         // Spend extra inference only on tasks that benefit from deeper checking.
         // Simple questions keep the fast single-pass path.
@@ -431,6 +432,10 @@ For substantial application requests, deliver implementation, not generic advice
           const engineeringFallback = engineeringTask ? buildEngineeringFallback(prompt) : "";
           if (engineeringFallback) {
             responseText = engineeringFallback;
+            modelIndependentFallback = true;
+          } else if (isProgrammingGenerationRequest(messages)) {
+            responseText = buildProgrammingProviderFailure(prompt, modelError);
+            programmingProviderUnavailable = true;
             modelIndependentFallback = true;
           } else {
             responseText = buildResearchOnlyFallback(prompt, evidenceBrief, modelError);
@@ -508,7 +513,7 @@ For substantial application requests, deliver implementation, not generic advice
 
         // Guarantee that retrieved sources are visible to the user even if the
         // model forgets to add a Sources section. Only cite pages actually fetched.
-        if (sources.length) {
+        if (sources.length && !programmingProviderUnavailable) {
           const missingSourceUrls = sources.filter(source => !responseText.includes(source.url));
           if (missingSourceUrls.length) {
             responseText = responseText.trim() + "\n\n## Sources\n" +
@@ -524,7 +529,8 @@ For substantial application requests, deliver implementation, not generic advice
           researchSourceCount: sources.length,
           qualityReviewUsed,
           modelIndependentFallback,
-          responseMode: modelIndependentFallback ? (engineeringTask ? "deterministic-engineering-fallback" : "research-evidence-only") : "language-model",
+          responseMode: programmingProviderUnavailable ? "provider-unavailable" : (modelIndependentFallback ? (engineeringTask ? "deterministic-engineering-fallback" : "research-evidence-only") : "language-model"),
+          generationUnavailable: programmingProviderUnavailable,
           engineeringTask,
           engineeringPlan,
           complexity: complexity.level,
@@ -1237,6 +1243,21 @@ function isProgrammingGenerationRequest(messages) {
     .map(message => message.content)
     .join("\n");
   return /```|\b(?:source code|write (?:a |an )?(?:python|javascript|typescript|java|kotlin|rust|go|c\+\+)?\s*(?:function|class|program|script)|implement (?:the |a |an )?(?:function|class|feature|algorithm)|unit tests?|test cases?|algorithm|refactor|compile error|build (?:an? )?app)\b/i.test(userText);
+}
+
+function buildProgrammingProviderFailure(prompt, error) {
+  const detail = String(error?.message || error || "Unknown provider failure.")
+    .replace(/https?:\/\/\S+/g, "[provider endpoint]")
+    .replace(/[\r\n]+/g, " ")
+    .slice(0, 700);
+  const task = String(prompt || "").trim().slice(0, 180);
+  return [
+    "I couldn't generate the requested code because every configured AI inference provider failed for this request.",
+    task ? "Requested task: " + task : "",
+    "Provider diagnostics: " + detail,
+    "No code was generated, executed, compiled, or tested. I have not substituted unrelated research results or invented an implementation.",
+    "Retry when a configured provider is available, or configure a working free-tier provider/API key in the deployment environment."
+  ].filter(Boolean).join("\\n\\n");
 }
 
 async function runChatModel(env, messages, options = {}) {
