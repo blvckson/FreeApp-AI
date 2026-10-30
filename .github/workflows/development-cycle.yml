@@ -125,22 +125,52 @@ jobs:
           echo "url=$PR_URL" >> "$GITHUB_OUTPUT"
           echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
 
-      - name: Wait for pull-request build and test checks
+      - name: Dispatch isolated Android build and regression validation
+        id: validate
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          SOURCE_BRANCH: ${{ steps.pr.outputs.branch }}
+        run: |
+          set -euo pipefail
+          echo "started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          gh api "repos/$GH_REPO/actions/workflows/ai-agent-build-diagnose.yml/dispatches" \
+            --method POST -f "ref=$SOURCE_BRANCH"
+          echo "Dispatched isolated build/test validation for $SOURCE_BRANCH."
+
+      - name: Wait for isolated build, tests, and APK artifact
         id: checks
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          SOURCE_BRANCH: ${{ steps.pr.outputs.branch }}
+          STARTED_AT: ${{ steps.validate.outputs.started_at }}
         run: |
           set -euo pipefail
-          echo "Waiting up to 25 minutes for pull request checks."
-          if timeout 25m gh pr checks "$PR_NUMBER" --repo "$GH_REPO" --watch --fail-fast; then
-            echo "conclusion=success" >> "$GITHUB_OUTPUT"
-          else
-            echo "conclusion=failure-or-timeout" >> "$GITHUB_OUTPUT"
-            gh pr checks "$PR_NUMBER" --repo "$GH_REPO" || true
-            exit 1
-          fi
+          VALIDATION_RUN=""
+          for attempt in $(seq 1 120); do
+            RUNS="$(gh api "repos/$GH_REPO/actions/workflows/ai-agent-build-diagnose.yml/runs?event=workflow_dispatch&per_page=30")"
+            VALIDATION_RUN="$(printf '%s' "$RUNS" | jq -r --arg branch "$SOURCE_BRANCH" --arg start "$STARTED_AT" '
+              [.workflow_runs[] | select(.head_branch == $branch and .created_at >= $start)] |
+              sort_by(.created_at) | last | .id // empty')"
+            if [ -n "$VALIDATION_RUN" ]; then
+              STATUS="$(gh api "repos/$GH_REPO/actions/runs/$VALIDATION_RUN" --jq '.status')"
+              CONCLUSION="$(gh api "repos/$GH_REPO/actions/runs/$VALIDATION_RUN" --jq '.conclusion // ""')"
+              echo "Validation run $VALIDATION_RUN: $STATUS $CONCLUSION"
+              if [ "$STATUS" = "completed" ]; then
+                echo "run_id=$VALIDATION_RUN" >> "$GITHUB_OUTPUT"
+                echo "conclusion=$CONCLUSION" >> "$GITHUB_OUTPUT"
+                [ "$CONCLUSION" = "success" ] || {
+                  echo "Build or regression checks failed. Inspect validation run $VALIDATION_RUN before repair."
+                  exit 1
+                }
+                exit 0
+              fi
+            fi
+            sleep 15
+          done
+          echo "Android validation did not finish within the 30-minute observation window."
+          exit 1
 
       - name: Record verified cycle result
         if: always()
@@ -150,6 +180,7 @@ jobs:
           PR_URL: ${{ steps.pr.outputs.url }}
           PR_NUMBER: ${{ steps.pr.outputs.number }}
           CHECK_RESULT: ${{ steps.checks.outputs.conclusion }}
+          VALIDATION_RUN: ${{ steps.checks.outputs.run_id }}
         run: |
           {
             echo
@@ -158,10 +189,11 @@ jobs:
             echo "- Engineering workflow run: ${ENGINEERING_RUN:-not completed}"
             echo "- Engineering proposal/build result: ${ENGINEERING_RESULT:-failed or not reached}"
             echo "- Pull request: ${PR_URL:-not created}"
-            echo "- Pull-request checks: ${CHECK_RESULT:-failed or not reached}"
+            echo "- Isolated build/test run: ${VALIDATION_RUN:-not completed}"
+            echo "- Build, unit-test and diagnostic result: ${CHECK_RESULT:-failed or not reached}"
             echo
             if [ "$CHECK_RESULT" = "success" ]; then
-              echo "**Result: ready for review.** Research, repository-aware implementation, isolated commit/PR, and configured PR checks completed. Review and merge the PR to start the main-branch APK build and deployment/benchmark workflows."
+              echo "**Result: ready for review.** Research, repository-aware implementation, isolated commit/PR, and a separately dispatched Android build/test validation completed. Review and merge the PR to start the main-branch APK build and deployment/benchmark workflows."
               echo "The merge remains a human approval gate. Deployment and release publication are not performed by this coordinator."
             else
               echo "**Result: not verified.** Inspect the linked engineering run and PR checks. No merge or release is authorized."
