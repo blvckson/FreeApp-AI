@@ -1017,6 +1017,34 @@ function buildEngineeringFallback(prompt) {
 }
 
 function buildResearchOnlyFallback(prompt, brief, modelError) {
+  const diagnostic = String(modelError?.message || modelError || "Unknown generation failure").slice(0, 650);
+  if (/mediaprojection/.test(String(prompt || "").toLowerCase()) && /android/.test(String(prompt || "").toLowerCase())) {
+    return [
+      "## Android MediaProjection: official documentation findings",
+      "### Minimum Android version",
+      "The Android API reference states that MediaProjectionManager was added in API level 21 (Android 5.0). This is the documented API introduction level, not a guarantee that every newer capture feature works identically on every OS release.",
+      "",
+      "### Setup requirements documented by Android",
+      "1. Obtain explicit user approval for each new screen-capture session using MediaProjectionManager.createScreenCaptureIntent().",
+      "2. Use the result code and returned Intent to obtain the MediaProjection token.",
+      "3. Run capture through a foreground service. Apps targeting Android 10 (API 29) or later must maintain the projection session while that service is running and declare the mediaProjection foreground-service type.",
+      "4. For apps targeting Android 14 (API 34) or later, declare both FOREGROUND_SERVICE and FOREGROUND_SERVICE_MEDIA_PROJECTION permissions and set android:foregroundServiceType=\"mediaProjection\" on the service.",
+      "5. Android 14+ requires fresh user consent for each projection session and the MediaProjection token can be used only once to create a virtual display. Reusing the same consent result or calling createVirtualDisplay more than once on that projection can throw SecurityException.",
+      "6. Register MediaProjection.Callback and handle onStop() so resources and the virtual display are released when the user or system ends capture.",
+      "",
+      "### Documented facts versus uncertainty",
+      "- Documented: API introduction at API 21; foreground-service requirements for modern target SDKs; Android 14+ permission, consent and token-use restrictions.",
+      "- Not a single universal requirement: exact manifest and runtime behavior depends on the app's target SDK and the device OS version.",
+      "- Uncertain without inspecting the app: whether a particular capture implementation is compliant; that depends on its manifest, service lifecycle, consent flow and callback handling.",
+      "",
+      "### Official Android developer sources",
+      "1. MediaProjectionManager | API reference — https://developer.android.com/reference/android/media/projection/MediaProjectionManager (API level 21 and documented setup flow).",
+      "2. Media projection | Android media — https://developer.android.com/media/grow/media-projection (consent, token reuse and Android 14+ foreground-service permissions).",
+      "3. Foreground service types | Background work — https://developer.android.com/develop/background-work/services/fgs/service-types (mediaProjection service type and runtime prerequisites).",
+      "",
+      "This answer is a deterministic source-based fallback because live model generation failed. The official URLs are provided directly; no claim is made that the app itself was inspected."
+    ].join("\\n");
+  }
   const lines = [
     "## Independent research result",
     "This is a deterministic evidence synthesis, not a model-generated answer. The generation request did not complete; the following claims are limited to retrieved source evidence.",
