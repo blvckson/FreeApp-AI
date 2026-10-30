@@ -1073,7 +1073,8 @@ function buildEngineeringFallback(prompt) {
 
 function buildProgrammingProviderFailure(prompt, modelError) {
   const diagnostic = String(modelError?.message || modelError || "Unknown generation failure")
-    .replace(/(key|token|secret|authorization)\s*[:=]\s*[^\s|]+/gi, "$1=[redacted]")
+    .replace(/https?:\/\/\S+/g, "[provider URL omitted]")
+    .replace(/(key|token|secret|authorization)\s*[:= ]+[^\s,;|]+/gi, "$1=[redacted]")
     .slice(0, 900);
   return [
     "## Programming generation temporarily unavailable",
