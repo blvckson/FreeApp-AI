@@ -22,13 +22,15 @@ test("research selection prefers distinct domains before duplicate publishers", 
   ]);
 });
 
-test("research selection excludes pages without relevant extracted evidence", () => {
+test("research keeps readable pages as context-only sources without treating them as evidence", () => {
   const items = [
     { host: "empty.example", relevant: [] },
     { host: "usable.example", relevant: [{ text: "matching evidence" }] }
   ];
-  const result = select(items, 8, 2);
-  assert.deepEqual(Array.from(result, x => x.host), ["usable.example"]);
+  const result = Array.from(select(items, 8, 2));
+  assert.deepEqual(result.map(x => x.host), ["usable.example", "empty.example"]);
+  assert.equal(result[1].contextOnly, true);
+  assert.equal(Array.from(result[1].relevant).length, 0);
 });
 
 test("research selection respects per-domain and result limits", () => {

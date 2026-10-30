@@ -836,13 +836,25 @@ function selectIndependentResearchSources(rankedItems, limit = 8, perDomainLimit
     if (selected.length >= maxItems) return selected;
   }
 
-  // Second pass: add another useful page from an already represented domain
+  // Second pass: add another relevant page from an already represented domain
   // only when additional independent domains were not available.
   for (const item of items) {
     if (!item || !Array.isArray(item.relevant) || item.relevant.length === 0) continue;
     const count = counts.get(item.host) || 0;
     if (count === 0 || count >= maxPerDomain || selected.includes(item)) continue;
     selected.push(item);
+    counts.set(item.host, count + 1);
+    if (selected.length >= maxItems) break;
+  }
+
+  // Restore the earlier broad source-register coverage after evidence-first
+  // selection. Readable ranked pages remain visible as context-only sources,
+  // but their sentences are never promoted into factual claims.
+  for (const item of items) {
+    if (!item || !item.host || selected.includes(item)) continue;
+    const count = counts.get(item.host) || 0;
+    if (count >= maxPerDomain) continue;
+    selected.push({ ...item, relevant: [], contextOnly: true });
     counts.set(item.host, count + 1);
     if (selected.length >= maxItems) break;
   }
@@ -897,11 +909,17 @@ function buildIndependentEvidenceBrief(query, sources) {
   }
   claims.sort((a,b) => b.hits-a.hits);
   const independentHosts = new Set(claims.map(x => x.host));
-  const quality = chosen.length >= 4 && independentHosts.size >= 3 ? "broader multi-source coverage"
-    : chosen.length >= 2 ? "limited multi-source coverage" : "weak or insufficient retrieved evidence";
+  const contextOnlySourceCount = chosen.filter(x => x.contextOnly || !x.relevant.length).length;
+  const evidenceSourceCount = chosen.length - contextOnlySourceCount;
+  const quality = evidenceSourceCount >= 4 && independentHosts.size >= 3 ? "broader multi-source coverage"
+    : evidenceSourceCount >= 2 ? "limited multi-source coverage"
+    : contextOnlySourceCount ? "limited source coverage; some pages are context-only"
+    : "weak or insufficient retrieved evidence";
 
   return {
     sourceCount: chosen.length,
+    evidenceSourceCount,
+    contextOnlySourceCount,
     sourceHosts: [...new Set(chosen.map(x => x.host))],
     quality,
     sources: chosen.map((x,i) => ({
@@ -921,6 +939,16 @@ function engineeringDeliverableGaps(prompt, response, buildMode = false) {
   const hasCode = /```[a-z0-9_-]*\n[\s\S]+?```/i.test(answer);
   if (!hasCode) gaps.push("complete fenced code or a clear reason implementation is not applicable");
 
+  // Restore the baseline completeness gate used by the stronger earlier
+  // programming/app-building path: every engineering deliverable must include
+  // a test/expected-result signal, even when the prompt does not say "test".
+  const hasBaselineTestCoverage = /\b(test|assert|expected output|acceptance criteria)\b/i.test(answer);
+  if (!hasBaselineTestCoverage) {
+    gaps.push("meaningful tests or expected results for the implementation");
+  }
+
+  // When the user explicitly requests tests, retain the stricter newer check
+  // for concrete assertions rather than weakening that improvement.
   const asksForTests = /\b(test|tests|testing|regression|acceptance)\b/.test(request);
   if (asksForTests && !(/\b(assert|expect\(|assert\.|should equal|expected (?:output|result))\b/i.test(answer) && /\b(test|tests|test case|acceptance)\b/i.test(answer))) {
     gaps.push("executable tests with concrete assertions and expected outcomes");
@@ -942,8 +970,10 @@ function engineeringDeliverableGaps(prompt, response, buildMode = false) {
     if (/\b(offline|sync|synchroni[sz]ation|network loss)\b/.test(request) && !/\b(offline|sync|conflict|retry|reconcil)\b/i.test(answer)) {
       gaps.push("offline behavior, synchronization and conflict recovery");
     }
-    const acceptanceCount = (answer.match(/\b(?:acceptance test|test case|scenario)\s*#?\s*\d+/gi) || []).length;
-    if (/\b(acceptance tests|test cases|at least eight|8 tests)\b/.test(request) && acceptanceCount < 8) {
+    // Accept common numbered test formats (including "Test 1", "1.",
+    // "Scenario 1" and "Acceptance test #1") instead of one brittle label.
+    const numberedTests = answer.match(/(?:^|\n)\s*(?:(?:acceptance\s+)?test(?:\s+case)?|scenario)\s*#?\s*\d+\s*[:.)-]?|(?:^|\n)\s*\d+[.)]\s+(?=(?:given|when|then|test|scenario|verify|check)\b)/gim) || [];
+    if (/\b(acceptance tests|test cases|at least eight|8 tests)\b/.test(request) && numberedTests.length < 8) {
       gaps.push("eight individually numbered acceptance tests with expected results");
     }
     if (!/\b(build|gradle|install|run|npm|command)\b/i.test(answer)) gaps.push("exact build and run instructions");
