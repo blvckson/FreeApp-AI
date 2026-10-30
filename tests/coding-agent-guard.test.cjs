@@ -1,6 +1,10 @@
-const test = require("node:test");
+const { test, before } = require("node:test");
 const assert = require("node:assert/strict");
-const guard = require("../public/coding-agent-guard.js");
+let guard;
+before(async () => {
+  await import("../public/coding-agent-guard.js");
+  guard = globalThis.FreeAppCodingGuard;
+});
 const inspected = ["public/app.js", "src/engine/core.ts"];
 const proposal = files => ({ summary: "Safe update", tests: ["npm test"], notes: ["Review before merge"], files });
 
