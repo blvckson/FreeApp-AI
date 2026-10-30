@@ -5,7 +5,7 @@ const path = require("node:path");
 const source = fs.readFileSync(path.join(__dirname, "..", "worker.js"), "utf8");
 
 test("programming requests prioritize configured Gemini before anonymous gateways", () => {
-  const programming = source.indexOf("programming: isProgrammingGenerationRequest(messages)");
+  const programming = source.indexOf("programming: isFocusedCodeGenerationRequest(messages)");
   const priority = source.indexOf("if (settings.programming && env.GEMINI_API_KEY)");
   const anonymous = source.indexOf("const kiloAttempts", priority);
   assert.ok(programming >= 0, "programming mode must be explicit");
@@ -35,4 +35,15 @@ test("programming provider failure is explicit and sanitizes credential-like val
   assert.match(result, /HTTP 429/);
   assert.doesNotMatch(result, /secret123|AIza012345678901234567890123|provider\.example/);
   assert.match(result, /No program was generated, compiled, or tested/);
+});
+
+test("programming-only routing classifier excludes debugging and app-building", () => {
+  const declaration = source.match(/function isFocusedCodeGenerationRequest\(messages\) \{[\s\S]*?\n\}/);
+  assert.ok(declaration, "focused code-generation classifier must exist");
+  const classify = new Function("return (" + declaration[0] + ");")();
+  assert.equal(classify([{role:"user",content:"Write a Python function first_non_repeating(s)."}]), true);
+  assert.equal(classify([{role:"user",content:"Debug this Python function."}]), false);
+  assert.equal(classify([{role:"user",content:"Fix this JavaScript bug."}]), false);
+  assert.equal(classify([{role:"user",content:"Build a full Android app."}]), false);
+  assert.equal(classify([{role:"user",content:"Explain this code."}]), false);
 });
