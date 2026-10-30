@@ -127,7 +127,7 @@ export default {
           if (!responses[i].ok) throw new Error("Could not inspect " + inspectPaths[i] + ": HTTP " + responses[i].status);
           const item = await responses[i].json();
           if (item.type !== "file" || typeof item.content !== "string") throw new Error("Unsupported repository file: " + inspectPaths[i]);
-          context.push({ path: inspectPaths[i], sha: item.sha, content: decodeBase64Utf8(item.content.replace(/\\s/g, "")).slice(0, 18000) });
+          context.push({ path: inspectPaths[i], sha: item.sha, content: decodeBase64Utf8(item.content.replace(/\s/g, "")).slice(0, 18000) });
         }
         const sourceContext = context.map(file => "FILE: " + file.path + "\\nBLOB SHA: " + file.sha + "\\n" + file.content).join("\\n\\n--- FILE BOUNDARY ---\\n\\n");
         const generated = await runChatModel(env, [
@@ -139,14 +139,14 @@ export default {
         if (start < 0 || /NO_SAFE_PATCH/i.test(answer)) {
           return json({ mode: "proposal-only", status: "no-safe-patch", repository: "blvckson/FreeApp-AI", base_sha: head.sha, inspected_paths: inspectPaths, patch: null, reason: "The reasoning engine did not produce a valid applicable patch. No repository files were changed." });
         }
-        const patch = answer.slice(start).replace(/\\n```[\\s\\S]*$/g, "").trim();
-        const fileHeaders = [...patch.matchAll(/^diff --git a\\/(.+?) b\\/(.+?)$/gm)];
+        const patch = answer.slice(start).replace(/\n```[\s\S]*$/g, "").trim();
+        const fileHeaders = [...patch.matchAll(/^diff --git a\/(.+?) b\/(.+?)$/gm)];
         const changed = [...new Set(fileHeaders.map(m => m[2]))];
         const allowedPath = path => allowed.includes(path) && !path.startsWith(".github/") && !path.includes("..");
         if (!fileHeaders.length || !changed.length || changed.length > 5 || changed.some(path => !allowedPath(path))) {
           return json({ error: "The generated patch failed path-scope validation.", status: "rejected", changed_paths: changed, no_changes_made: true }, 422);
         }
-        if (!/^diff --git /m.test(patch) || !/^(--- a\\/.+|new file mode )/m.test(patch) || !/^\\+\\+\\+ b\\//m.test(patch)) {
+        if (!/^diff --git /m.test(patch) || !/^(--- a\/.+|new file mode )/m.test(patch) || /^\+\+\+ b\//m.test(patch) === false) {
           return json({ error: "The generated patch is incomplete or malformed.", status: "rejected", no_changes_made: true }, 422);
         }
         return json({
