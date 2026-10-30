@@ -813,6 +813,35 @@ async function researchWeb(query) {
   return selected;
 }
 
+function selectIndependentResearchSources(rankedItems, limit = 8, perDomainLimit = 2) {
+  const items = Array.isArray(rankedItems) ? rankedItems : [];
+  const maxItems = Math.max(1, Math.min(Number(limit) || 8, 12));
+  const maxPerDomain = Math.max(1, Math.min(Number(perDomainLimit) || 2, 3));
+  const selected = [];
+  const counts = new Map();
+
+  // First pass: maximise independent publisher coverage.
+  for (const item of items) {
+    if (!item || !Array.isArray(item.relevant) || item.relevant.length === 0) continue;
+    if (!item.host || counts.has(item.host)) continue;
+    selected.push(item);
+    counts.set(item.host, 1);
+    if (selected.length >= maxItems) return selected;
+  }
+
+  // Second pass: add another useful page from an already represented domain
+  // only when additional independent domains were not available.
+  for (const item of items) {
+    if (!item || !Array.isArray(item.relevant) || item.relevant.length === 0) continue;
+    const count = counts.get(item.host) || 0;
+    if (count === 0 || count >= maxPerDomain || selected.includes(item)) continue;
+    selected.push(item);
+    counts.set(item.host, count + 1);
+    if (selected.length >= maxItems) break;
+  }
+  return selected;
+}
+
 function buildIndependentEvidenceBrief(query, sources) {
   // Deterministic evidence analysis runs inside FreeApp AI before language
   // generation. It does not depend on another AI provider and never treats a
@@ -848,14 +877,10 @@ function buildIndependentEvidenceBrief(query, sources) {
   }
 
   ranked.sort((a,b) => b.score-a.score);
-  const chosen = [];
-  const domains = new Set();
-  for (const item of ranked) {
-    if (domains.has(item.host) && chosen.length < 4) continue;
-    chosen.push(item);
-    domains.add(item.host);
-    if (chosen.length >= 8) break;
-  }
+  // Do not count a readable page as evidence unless it contains query-relevant
+  // sentences. Prefer independent domains before allowing a second page from
+  // any one publisher; this prevents one site from inflating source coverage.
+  const chosen = selectIndependentResearchSources(ranked, 8, 2);
 
   const claims = [];
   for (const item of chosen) {
