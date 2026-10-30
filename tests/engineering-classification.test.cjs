@@ -3,7 +3,8 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const vm = require("node:vm");
 
-const source = fs.readFileSync(new URL("../worker.js", import.meta.url), "utf8");
+const path = require("node:path");
+const source = fs.readFileSync(path.join(__dirname, "..", "worker.js"), "utf8");
 const match = source.match(/function isSoftwareEngineeringRequest\\(prompt\\) \\{[\\s\\S]*?\\n\\}/);
 assert.ok(match, "engineering request classifier must exist");
 const classify = vm.runInNewContext("(" + match[0] + "; isSoftwareEngineeringRequest)");
