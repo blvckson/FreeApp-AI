@@ -70,12 +70,12 @@ test("research restores broad source-register coverage without promoting context
 });
 
 test("app-building validator accepts eight commonly numbered acceptance tests", () => {
-  const answer = fence + "kotlin\\nfun saveStock() = true\\n" + fence + "\\n" +
-    "Architecture and data flow: inventory module writes to SQLite.\\n" +
-    "Database schema: stock table with primary key and quantity constraint.\\n" +
-    "Atomic transaction with rollback and idempotency key.\\n" +
-    "Offline sync queues changes and resolves conflicts.\\n" +
-    Array.from({length:8}, (_, i) => "Test " + (i + 1) + ": verify the expected stock quantity after the operation.").join("\\n") +
-    "\\nBuild and run with ./gradlew assembleDebug.\\nassert expected stock count.";
+  const answer = fence + "kotlin\nfun saveStock() = true\n" + fence + "\n" +
+    "Architecture and data flow: inventory module writes to SQLite.\n" +
+    "Database schema: stock table with primary key and quantity constraint.\n" +
+    "Atomic transaction with rollback and idempotency key.\n" +
+    "Offline sync queues changes and resolves conflicts.\n" +
+    Array.from({length:8}, (_, i) => "Test " + (i + 1) + ": verify the expected stock quantity after the operation.").join("\n") +
+    "\nBuild and run with ./gradlew assembleDebug.\nassert expected stock count.";
   assert.deepEqual(Array.from(gapsFor("Build an inventory app with database, stock transactions, offline sync and at least eight acceptance tests", answer, true)), []);
 });
