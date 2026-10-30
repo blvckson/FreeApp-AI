@@ -6,11 +6,16 @@ const path = require("node:path");
 test("programming generation gets the extended timeout classifier only", () => {
   const source = fs.readFileSync(path.join(__dirname, "..", "worker.js"), "utf8");
   const declaration = source.match(/function isProgrammingGenerationRequest\(messages\) \{[\s\S]*?\n\}/);
-  assert.ok(declaration, "programming request classifier must exist");
-  const classify = new Function("return (" + declaration[0] + ");")();
+  const focusedDeclaration = source.match(/function isFocusedCodeGenerationRequest\(messages\) \{[\s\S]*?\n\}/);
+  const buildDeclaration = source.match(/function isComplexAppBuildRequest\(prompt\) \{[\s\S]*?\n\}/);
+  assert.ok(declaration && focusedDeclaration && buildDeclaration, "programming and app-build classifiers must exist");
+  const isAppBuild = new Function("return (" + buildDeclaration[0] + ");")();
+  const isFocused = new Function("isComplexAppBuildRequest", "return (" + focusedDeclaration[0] + ");")(isAppBuild);
+  const classify = new Function("isFocusedCodeGenerationRequest", "return (" + declaration[0] + ");")(isFocused);
 
   assert.equal(classify([{ role: "user", content: "Write a Python function and include unit tests." }]), true);
   assert.equal(classify([{ role: "user", content: "Implement the algorithm in JavaScript." }]), true);
+  assert.equal(classify([{ role: "user", content: "Build a full Android application with offline storage." }]), true);
   assert.equal(classify([{ role: "user", content: "Explain the causes of inflation." }]), false);
   assert.equal(classify([{ role: "user", content: "Compare two historical events." }]), false);
 
