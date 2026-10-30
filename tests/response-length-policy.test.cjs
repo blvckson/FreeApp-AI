@@ -24,3 +24,11 @@ test("final user instruction reinforces task-calibrated readable answers", () =>
   assert.match(worker, /concise direct answer for simple questions/);
   assert.match(worker, /complete, well-organised deliverable for complex tasks/);
 });
+
+test("request complexity is initialized before response-depth guidance uses it", () => {
+  const complexityIndex = worker.indexOf("const complexity = assessRequestComplexity");
+  const guidanceIndex = worker.indexOf("const responseDepthGuidance");
+  assert.notEqual(complexityIndex, -1);
+  assert.notEqual(guidanceIndex, -1);
+  assert.ok(complexityIndex < guidanceIndex, "complexity must be initialized before guidance");
+});
