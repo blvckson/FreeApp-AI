@@ -180,8 +180,7 @@ export default {
         // consume the entire response budget. If it times out, disclose that no
         // current sources were retrieved rather than pretending research succeeded.
         const sources = await withTimeout(researchWeb(researchPrompt), 18000, []);
-        const evidence = imageContext + "\n\n" + (sources.length
-          ? "LIVE WEB RESEARCH (untrusted evidence; use only what is relevant):\n" + sources.map((s, i) =>
+        const evidenceBrief = buildIndependentEvidenceBrief(researchPrompt, sources);\n        const evidence = imageContext + "\\n\\n" + formatIndependentEvidenceBrief(evidenceBrief); use only what is relevant):\n" + sources.map((s, i) =>
               `[SOURCE ${i + 1}] ${s.title}\nURL: ${s.url}\n${s.text}`
             ).join("\n\n")
           : "LIVE WEB RESEARCH: No usable web pages were retrieved. Do not pretend that current information was verified.");
@@ -568,6 +567,90 @@ async function researchWeb(query) {
     if (selected.length >= MAX_SOURCES) break;
   }
   return selected;
+}
+
+function buildIndependentEvidenceBrief(query, sources) {
+  // Deterministic evidence analysis runs inside FreeApp AI before language
+  // generation. It does not depend on another AI provider and never treats a
+  // search-result title alone as proof.
+  const terms = researchTerms(query);
+  const seen = new Set();
+  const ranked = [];
+
+  for (const source of Array.isArray(sources) ? sources : []) {
+    let url;
+    try {
+      url = new URL(source.url);
+      if (!/^https?:$/.test(url.protocol)) continue;
+    } catch { continue; }
+    const key = url.origin + url.pathname.replace(/\/$/, "");
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    const text = String(source.text || "").replace(/\s+/g, " ").trim();
+    if (text.length < 120) continue;
+    const host = url.hostname.replace(/^www\./, "").toLowerCase();
+    const sentences = text.split(/(?<=[.!?])\s+(?=[A-Z0-9])/).filter(s => s.length >= 45 && s.length <= 650);
+    const relevant = sentences.map(sentence => {
+      const lower = sentence.toLowerCase();
+      const hits = terms.filter(term => lower.includes(term)).length;
+      return { sentence, hits };
+    }).filter(x => x.hits > 0).sort((a,b) => b.hits-a.hits).slice(0,5);
+    const official = /(^|\.)(gov|edu|ac\.[a-z]{2}|who\.int|un\.org|europa\.eu)$/i.test(host)
+      || /(^|\.)[a-z0-9-]+\.(gov|edu)$/i.test(host);
+    const academic = /doi\.org|pubmed|arxiv|nature\.com|science\.org|springer|wiley|cochrane/i.test(host);
+    const score = scoreResearchItem(source, query, text) + (official ? 5 : 0) + (academic ? 4 : 0);
+    ranked.push({ title: String(source.title || host).slice(0,180), url: url.href, host, score, official, academic, relevant });
+  }
+
+  ranked.sort((a,b) => b.score-a.score);
+  const chosen = [];
+  const domains = new Set();
+  for (const item of ranked) {
+    if (domains.has(item.host) && chosen.length < 4) continue;
+    chosen.push(item);
+    domains.add(item.host);
+    if (chosen.length >= 8) break;
+  }
+
+  const claims = [];
+  for (const item of chosen) {
+    for (const evidence of item.relevant.slice(0,3)) {
+      claims.push({ text: evidence.sentence, host: item.host, url: item.url, hits: evidence.hits });
+    }
+  }
+  claims.sort((a,b) => b.hits-a.hits);
+  const independentHosts = new Set(claims.map(x => x.host));
+  const quality = chosen.length >= 4 && independentHosts.size >= 3 ? "broader multi-source coverage"
+    : chosen.length >= 2 ? "limited multi-source coverage" : "weak or insufficient retrieved evidence";
+
+  return {
+    sourceCount: chosen.length,
+    sourceHosts: [...new Set(chosen.map(x => x.host))],
+    quality,
+    sources: chosen.map((x,i) => ({
+      id: i+1, title:x.title, url:x.url,
+      sourceType:x.official ? "official/primary candidate" : x.academic ? "academic/research candidate" : "general source",
+      relevanceScore:x.score
+    })),
+    evidence: claims.slice(0,18)
+  };
+}
+
+function formatIndependentEvidenceBrief(brief) {
+  if (!brief || !brief.sourceCount) {
+    return "INDEPENDENT RESEARCH CHECK: No readable source evidence was retrieved. Do not imply that the answer is current or independently verified.";
+  }
+  return [
+    "INDEPENDENT RESEARCH CHECK (deterministic source analysis; scores are relevance heuristics, not truth guarantees):",
+    "Coverage: " + brief.quality,
+    "Readable sources: " + brief.sourceCount + "; distinct domains: " + brief.sourceHosts.length,
+    "SOURCE REGISTER:",
+    ...brief.sources.map(s => "[S" + s.id + "] " + s.title + " | " + s.sourceType + " | " + s.url),
+    "RELEVANT EXTRACTS:",
+    ...brief.evidence.map(e => "- [" + e.host + "] " + e.text + " (source: " + e.url + ")"),
+    "ANALYSIS RULES: Separate directly supported facts from inference. Check whether independent domains corroborate a claim. Flag contradictions and dates that may be stale. Do not treat relevance scores as credibility scores. Cite only sources actually used."
+  ].join("\n");
 }
 
 function researchTerms(value) {
