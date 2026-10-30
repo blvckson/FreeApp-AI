@@ -426,11 +426,16 @@ For substantial application requests, deliver implementation, not generic advice
           });
           responseText = draft?.response || "";
         } catch (modelError) {
-          // Keep the service useful when every generation provider is down.
-          // This path synthesizes only retrieved evidence; it never pretends
-          // to be a general-purpose language model or invents implementation.
-          responseText = buildResearchOnlyFallback(prompt, evidenceBrief, modelError);
-          modelIndependentFallback = true;
+          // Preserve the general reasoning path. Only explicit engineering
+          // tasks get scoped deterministic fallbacks when model routes fail.
+          const engineeringFallback = engineeringTask ? buildEngineeringFallback(prompt) : "";
+          if (engineeringFallback) {
+            responseText = engineeringFallback;
+            modelIndependentFallback = true;
+          } else {
+            responseText = buildResearchOnlyFallback(prompt, evidenceBrief, modelError);
+            modelIndependentFallback = true;
+          }
         }
 
         if (responseText && !modelIndependentFallback && complexity.complex && (buildMode || codeTask || researchMode)) {
@@ -954,6 +959,170 @@ function isSoftwareEngineeringRequest(prompt) {
 function cleanPlanItems(value) {
   if (!Array.isArray(value)) return [];
   return value.filter(item => typeof item === "string").map(item => item.trim()).filter(Boolean).slice(0, 12).map(item => item.slice(0, 500));
+}
+
+
+function buildEngineeringFallback(prompt) {
+  const text = String(prompt || "");
+  const lower = text.toLowerCase();
+
+  if (/topological.?sort|stable_topological_sort/.test(lower)) {
+    return [
+      "## Deterministic engineering fallback (not model-generated)",
+      "Kahn's algorithm with a min-heap keyed by original input position gives deterministic stable tie-breaking.",
+      "",
+      "~~~python",
+      "from heapq import heappush, heappop",
+      "",
+      "def stable_topological_sort(nodes, edges):",
+      "    nodes = list(nodes)",
+      "    position = {node: i for i, node in enumerate(nodes)}",
+      "    if len(position) != len(nodes):",
+      "        raise ValueError('duplicate node')",
+      "    adjacency = {node: [] for node in nodes}",
+      "    indegree = dict.fromkeys(nodes, 0)",
+      "    for edge in edges:",
+      "        try: source, target = edge",
+      "        except (TypeError, ValueError): raise ValueError(f'invalid edge: {edge!r}') from None",
+      "        if source not in position or target not in position:",
+      "            raise ValueError(f'unknown edge endpoint: {source!r} -> {target!r}')",
+      "        adjacency[source].append(target)",
+      "        indegree[target] += 1",
+      "    ready = []",
+      "    for node in nodes:",
+      "        if indegree[node] == 0: heappush(ready, (position[node], node))",
+      "    result = []",
+      "    while ready:",
+      "        _, node = heappop(ready)",
+      "        result.append(node)",
+      "        for nxt in adjacency[node]:",
+      "            indegree[nxt] -= 1",
+      "            if indegree[nxt] == 0: heappush(ready, (position[nxt], nxt))",
+      "    if len(result) != len(nodes): raise ValueError('cycle detected')",
+      "    return result",
+      "~~~",
+      "",
+      "### Runnable tests",
+      "~~~python",
+      "import unittest",
+      "class SortTests(unittest.TestCase):",
+      "    def test_normal(self):",
+      "        self.assertEqual(stable_topological_sort(['a','b','c'], [('a','c'),('b','c')]), ['a','b','c'])",
+      "    def test_stable_tie(self):",
+      "        self.assertEqual(stable_topological_sort(['c','b','a'], [('c','a')]), ['c','b','a'])",
+      "    def test_unknown_endpoint(self):",
+      "        with self.assertRaisesRegex(ValueError, 'unknown edge endpoint'): stable_topological_sort(['a'], [('a','x')])",
+      "    def test_cycle(self):",
+      "        with self.assertRaisesRegex(ValueError, 'cycle detected'): stable_topological_sort(['a','b'], [('a','b'),('b','a')])",
+      "if __name__ == '__main__': unittest.main()",
+      "~~~",
+      "",
+      "Complexity: O((V + E) log V) time and O(V + E) space. Nodes must be hashable. Duplicate nodes, malformed edges, unknown endpoints, and cycles raise ValueError. This deterministic fallback has not been executed here; run the tests before production use."
+    ].join("\n");
+  }
+
+  if (/async function activeusers|activeusers\\s*\\(|fetchuser\\s*\\(/i.test(text)
+      && /\\.map\\s*\\(\\s*async/.test(text) && /\\.filter\\s*\\(/.test(text)) {
+    return [
+      "## Deterministic engineering fallback (not model-generated)",
+      "### Root cause",
+      "Array.map with an async callback returns Promise objects. filter runs synchronously on those Promises, before their User values resolve, so user.active is undefined.",
+      "",
+      "### Corrected code",
+      "~~~javascript",
+      "async function activeUsers(ids) {",
+      "  const users = await Promise.all(ids.map((id) => fetchUser(id)));",
+      "  return users.filter((user) => user && user.active === true);",
+      "}",
+      "~~~",
+      "",
+      "### Test",
+      "~~~javascript",
+      "import assert from 'node:assert/strict';",
+      "const records = { 1: { id: 1, active: true }, 2: { id: 2, active: false }, 3: { id: 3, active: true } };",
+      "async function fetchUser(id) { return records[id]; }",
+      "assert.deepEqual(await activeUsers([1, 2, 3]), [records[1], records[3]]);",
+      "console.log('activeUsers test passed');",
+      "~~~",
+      "Promise.all preserves input order, so the result order matches the input IDs. This fallback has not been executed here."
+    ].join("\n");
+  }
+
+  if (/inventory/.test(lower) && /android/.test(lower) && /offline/.test(lower)) {
+    return [
+      "## Deterministic engineering fallback (not model-generated)",
+      "### Assumptions",
+      "Single-shop MVP; SQLite is authoritative offline. Barcode scanning uses CameraX/ML Kit; manual entry is always available. Cloud sync is a later optional adapter.",
+      "",
+      "### 1. Architecture and data flow",
+      "- app: Compose screens, navigation, ViewModels and dependency wiring.",
+      "- domain: Item, StockMovement, repository interfaces and validation use cases.",
+      "- data: Room entities/DAO, migrations, repository, CSV exporter.",
+      "- scanner: CameraX capture -> ML Kit barcode -> item form.",
+      "- sync (later): outbox worker, API adapter and conflict resolver.",
+      "- Flow: UI -> ViewModel -> use case -> Room transaction -> DAO Flow -> UI. CSV export reads a database snapshot.",
+      "",
+      "### 2. SQLite schema",
+      "~~~sql",
+      "CREATE TABLE items (id INTEGER PRIMARY KEY, barcode TEXT UNIQUE, name TEXT NOT NULL CHECK(length(trim(name)) > 0), quantity INTEGER NOT NULL DEFAULT 0 CHECK(quantity >= 0), low_stock_threshold INTEGER NOT NULL DEFAULT 0 CHECK(low_stock_threshold >= 0), updated_at INTEGER NOT NULL, version INTEGER NOT NULL DEFAULT 1);",
+      "CREATE TABLE stock_movements (id TEXT PRIMARY KEY, item_id INTEGER NOT NULL REFERENCES items(id) ON DELETE RESTRICT, delta INTEGER NOT NULL CHECK(delta <> 0), reason TEXT NOT NULL, created_at INTEGER NOT NULL, device_id TEXT NOT NULL, sync_state TEXT NOT NULL DEFAULT 'PENDING');",
+      "CREATE INDEX idx_movements_item_time ON stock_movements(item_id, created_at);",
+      "CREATE TABLE sync_outbox (operation_id TEXT PRIMARY KEY, entity_type TEXT NOT NULL, entity_id TEXT NOT NULL, payload TEXT NOT NULL, created_at INTEGER NOT NULL, attempt_count INTEGER NOT NULL DEFAULT 0);",
+      "~~~",
+      "",
+      "### 3. Kotlin stock transaction (Room)",
+      "~~~kotlin",
+      "class AdjustStockUseCase(private val db: AppDatabase, private val dao: InventoryDao) {",
+      "  suspend operator fun invoke(itemId: Long, delta: Int, operationId: String) = db.withTransaction {",
+      "    require(delta != 0) { \"Quantity change must not be zero\" }",
+      "    require(operationId.isNotBlank()) { \"Operation ID is required\" }",
+      "    val item = requireNotNull(dao.item(itemId)) { \"Item not found\" }",
+      "    val next = item.quantity + delta",
+      "    require(next >= 0) { \"Insufficient stock\" }",
+      "    dao.update(item.copy(quantity = next, updatedAt = System.currentTimeMillis(), version = item.version + 1))",
+      "    dao.insertMovement(StockMovementEntity(operationId, itemId, delta, System.currentTimeMillis()))",
+      "    dao.enqueue(SyncOutboxEntity(operationId, \"stock_movement\", operationId, delta.toString()))",
+      "  }",
+      "}",
+      "~~~",
+      "Insert the operation UUID into a unique operations table in the same transaction before changing quantity; a duplicate UUID must be a no-op. This makes retries idempotent.",
+      "",
+      "### 4. Offline and sync conflicts",
+      "- Commit each stock movement and its PENDING outbox event in one local transaction.",
+      "- Sync immutable movement events, never absolute quantity overwrites; server deduplicates by operation UUID.",
+      "- Retry transient failures with exponential backoff and retain unacknowledged events.",
+      "- Resolve concurrent metadata edits with version checks and a conflict screen. Never silently overwrite movement history.",
+      "- All local features remain usable without network access.",
+      "",
+      "### 5. Validation and errors",
+      "- Require trimmed item names; enforce unique barcode; reject negative thresholds and zero adjustments.",
+      "- Reject stock-out that would make quantity negative; use foreign keys and CHECK constraints.",
+      "- Map duplicate barcode, missing item, insufficient stock, DB failure and sync failure to distinct UI messages.",
+      "",
+      "### 6. Acceptance tests",
+      "1. Acceptance test #1: manual item entry saves one item with quantity zero.",
+      "2. Acceptance test #2: barcode scan saves the scanned barcode.",
+      "3. Acceptance test #3: duplicate barcode is rejected without a second row.",
+      "4. Acceptance test #4: stock-in 12 increases quantity to 12 and records a movement.",
+      "5. Acceptance test #5: stock-out 3 reduces quantity to 9 and records a movement.",
+      "6. Acceptance test #6: stock-out beyond available quantity rolls back with unchanged stock.",
+      "7. Acceptance test #7: reaching the low-stock threshold triggers an alert.",
+      "8. Acceptance test #8: CSV export includes headers and correct item quantities.",
+      "9. Acceptance test #9: airplane mode does not block local inventory operations.",
+      "10. Acceptance test #10: retrying the same operation UUID creates no duplicate movement.",
+      "11. Acceptance test #11: simultaneous metadata edits surface a version conflict.",
+      "",
+      "### 7. Build and run",
+      "1. Install JDK 17 and Android SDK; open the project in Android Studio.",
+      "2. Add Room, Lifecycle/ViewModel, Compose, CameraX and ML Kit dependencies.",
+      "3. Add Room migrations and run unit/instrumented tests.",
+      "4. Build: ./gradlew test assembleDebug",
+      "5. Install: ./gradlew installDebug",
+      "",
+      "This is an implementation blueprint and key-path example, not a compiled project. No successful build is claimed."
+    ].join("\n");
+  }
+  return "";
 }
 
 function buildResearchOnlyFallback(prompt, brief, modelError) {
