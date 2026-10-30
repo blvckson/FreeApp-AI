@@ -657,7 +657,7 @@ function buildResearchOnlyFallback(prompt, brief, modelError) {
     lines.push("### What the retrieved material says");
     const seen = new Set();
     for (const item of brief.evidence) {
-      const key = item.text.toLowerCase().replace(/\\W+/g, " ").slice(0, 180);
+      const key = item.text.toLowerCase().replace(/\W+/g, " ").slice(0, 180);
       if (seen.has(key)) continue;
       seen.add(key);
       lines.push("- " + item.text + " (Source: " + item.url + ")");
@@ -672,7 +672,7 @@ function buildResearchOnlyFallback(prompt, brief, modelError) {
   }
   const diagnostic = String(modelError?.message || modelError || "Unknown generation failure").slice(0, 650);
   lines.push("", "### Service status", "Generation failure: " + diagnostic, "Research was attempted independently. No claim of live verification is made beyond the source register returned with this response.");
-  return lines.join("\\n");
+  return lines.join("\n");
 }
 
 function formatIndependentEvidenceBrief(brief) {
