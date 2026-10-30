@@ -320,8 +320,8 @@ export default {
         const evidence = imageContext + "\n\n" + formatIndependentEvidenceBrief(evidenceBrief);
 
         const buildMode = isComplexAppBuildRequest(prompt);
-        const codeTask = isSoftwareEngineeringRequest(prompt) && /\\b(code|program|debug|fix|refactor|implement|algorithm|api|backend|frontend|database|test|compile|build|app|application|software|repository|github)\\b/i.test(prompt);
-        const researchMode = /\\b(research|investigate|compare|evaluate|latest|current|evidence|sources|literature review|market analysis)\\b/i.test(prompt);
+        const codeTask = isSoftwareEngineeringRequest(prompt) && /\b(code|program|debug|fix|refactor|implement|algorithm|api|backend|frontend|database|test|compile|build|app|application|software|repository|github)\b/i.test(prompt);
+        const researchMode = /\b(research|investigate|compare|evaluate|latest|current|evidence|sources|literature review|market analysis)\b/i.test(prompt);
         const messages = [
           { role: "system", content: SYSTEM_PROMPT },
           ...(researchMode ? [{
