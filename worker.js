@@ -1321,6 +1321,7 @@ async function runChatModel(env, messages, options = {}) {
     // Kilo's live model catalogue exposed this free coding-tuned model while
     // kilo-auto/free returned HTTP 200 with an empty assistant message.
     { name: "Kilo North Mini Code (free)", url: "https://api.kilo.ai/api/gateway/chat/completions", model: "cohere/north-mini-code:free", timeoutMs: 10000 },
+    { name: "Kilo Nemotron Lightning (free)", url: "https://api.kilo.ai/api/gateway/chat/completions", model: "nvidia/nemotron-3.5-lightning:free", timeoutMs: 10000 },
     { name: "Kilo current gateway (free)", url: "https://api.kilo.ai/api/gateway/chat/completions", model: "kilo-auto/free", timeoutMs: 10000 },
     { name: "Kilo current gateway (efficient)", url: "https://api.kilo.ai/api/gateway/chat/completions", model: "kilo-auto/efficient", timeoutMs: 10000 },
     { name: "Kilo compatibility gateway (free)", url: "https://ai-gateway.kilo.ai/api/v1/chat/completions", model: "kilo-auto/free", timeoutMs: 10000 }
