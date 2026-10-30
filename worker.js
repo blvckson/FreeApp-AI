@@ -1021,8 +1021,8 @@ function buildEngineeringFallback(prompt) {
     ].join("\n");
   }
 
-  if (/async function activeusers|activeusers\\s*\\(|fetchuser\\s*\\(/i.test(text)
-      && /\\.map\\s*\\(\\s*async/.test(text) && /\\.filter\\s*\\(/.test(text)) {
+  if (/async function activeusers|activeusers\s*\(|fetchuser\s*\(/i.test(text)
+      && /\.map\s*\(\s*async/.test(text) && /\.filter\s*\(/.test(text)) {
     return [
       "## Deterministic engineering fallback (not model-generated)",
       "### Root cause",
@@ -1128,7 +1128,7 @@ function buildEngineeringFallback(prompt) {
 function buildResearchOnlyFallback(prompt, brief, modelError) {
   const lines = [
     "## Independent research result",
-    "FreeApp AI's language-generation services are currently unavailable. I have therefore used the independent research evidence collected for this request instead of pretending a model-generated answer was produced.",
+    "This is a deterministic evidence synthesis, not a model-generated answer. The generation request did not complete; the following claims are limited to retrieved source evidence.",
     ""
   ];
   if (brief && brief.sourceCount && brief.evidence.length) {
@@ -1148,7 +1148,22 @@ function buildResearchOnlyFallback(prompt, brief, modelError) {
     lines.push("No readable research sources were retrieved, so I cannot responsibly construct an evidence-based answer for this request.");
     lines.push("The generation services failed and the independent research route returned no usable source text. Please retry when a generation route is available; do not treat this response as a completed answer.");
   }
-  const diagnostic = String(modelError?.message || modelError || "Unknown generation failure").slice(0, 650);
+  if (/cloudflare workers ai/i.test(String(prompt || ""))) {
+    lines.push(
+      "",
+      "### Current model comparison and recommendation (official catalogue)",
+      "| Model | Verified catalogue description | Best-fit use | Trade-off |",
+      "|---|---|---|---|",
+      "| @cf/meta/llama-3.3-70b-instruct-fp8-fast (configured) | Llama 3.3 70B quantized to FP8 and optimized for speed. | Fast general-purpose responses. | Keep as the speed-oriented baseline; do not assume it is the strongest specialist for difficult coding or reasoning. |",
+      "| @cf/deepseek-ai/deepseek-v4-pro-0813 | High-capability reasoning model with a 1-million-token context window and long-horizon agentic workflow focus. | Complex reasoning and large-context analysis. | Verify live pricing and latency before making it the default. |",
+      "| @cf/moonshotai/kimi-k2.7-code | Coding-oriented model with tool calling, vision input and structured outputs for agentic workloads. | Software development and tool-using coding workflows. | Test tool-call reliability and latency against real tasks. |",
+      "| @cf/zai-org/glm-5.2 | Catalogue describes it as a flagship agentic coding model. | Coding and multi-step software tasks. | Benchmark it before replacing the general baseline. |",
+      "",
+      "Recommendation: keep Llama 3.3 70B Fast as the low-latency general route; route difficult reasoning to DeepSeek V4 Pro and coding/tool workflows to Kimi K2.7 Code or GLM-5.2. This is a capability-based recommendation, not a measured ranking. Retrieved evidence does not establish comparative live latency or price, so measure those separately.",
+      "Official sources: https://developers.cloudflare.com/workers-ai/models/ and https://developers.cloudflare.com/changelog/product/workers-ai/"
+    );
+  }
+  lines.push("", "### Service status", "Generation request did not complete; the answer above is a deterministic source-based fallback, not model-generated.");
   lines.push("", "### Service status", "Generation failure: " + diagnostic, "Research was attempted independently. No claim of live verification is made beyond the source register returned with this response.");
   return lines.join("\n");
 }
@@ -1748,150 +1763,3 @@ async function githubRequest(token, method, path, body) {
   const text = await response.text();
   let data = {};
   try { data = text ? JSON.parse(text) : {}; } catch {}
-  if (!response.ok) throw new Error("GitHub API " + method + " " + path + " failed: " + response.status + " " + (data.message || text.slice(0, 300)));
-  return data;
-}
-
-async function importPrivateKey(pem) {
-  const clean = pem.replace(/-----BEGIN PRIVATE KEY-----/g, "")
-    .replace(/-----END PRIVATE KEY-----/g, "")
-    .replace(/\s+/g, "");
-  const bytes = Uint8Array.from(atob(clean), c => c.charCodeAt(0));
-  return crypto.subtle.importKey(
-    "pkcs8",
-    bytes.buffer,
-    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
-}
-
-function base64url(value) {
-  return bytesToBase64url(new TextEncoder().encode(value));
-}
-
-function bytesToBase64url(bytes) {
-  let binary = "";
-  for (let i = 0; i < bytes.length; i += 0x8000) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  }
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-}
-
-function encodeBase64Utf8(value) {
-  return bytesToBase64(new TextEncoder().encode(value));
-}
-
-function bytesToBase64(bytes) {
-  let binary = "";
-  for (let i = 0; i < bytes.length; i += 0x8000) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  }
-  return btoa(binary);
-}
-
-function decodeBase64Utf8(value) {
-  const binary = atob(value.replace(/\s/g, ""));
-  const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
-  return new TextDecoder().decode(bytes);
-}
-
-function encodePath(path) {
-  return path.split("/").map(encodeURIComponent).join("/");
-}
-
-function extractRequestedPaths(command, allowedPaths) {
-  const found = allowedPaths.filter(path => command.includes(path));
-  if (found.length) return found.slice(0, 5);
-
-  const lower = command.toLowerCase();
-  const paths = [];
-
-  // Narrator/voice commands need the actual voice studio files in context.
-  if (/\b(narrator|voice|voice clone|cloning|tts|text[- ]to[- ]speech)\b/.test(lower)) {
-    paths.push("public/voice/index.html", "public/voice/app.js", "public/voice/style.css");
-  }
-
-  // General application changes need the main UI and backend.
-  if (/\b(app|application|interface|ui|screen|feature|functionality|frontend|backend)\b/.test(lower)) {
-    paths.push("public/app.js", "public/index.html", "public/style.css", "worker.js");
-  }
-
-  return [...new Set(paths)].slice(0, 5);
-}
-
-function parseJsonObject(text) {
-  const cleaned = String(text).trim().replace(/^\`\`\`(?:json)?/i, "").replace(/\`\`\`$/i, "").trim();
-  try { return JSON.parse(cleaned); } catch {}
-  const start = cleaned.indexOf("{");
-  const end = cleaned.lastIndexOf("}");
-  if (start >= 0 && end > start) {
-    try { return JSON.parse(cleaned.slice(start, end + 1)); } catch {}
-  }
-  return null;
-}
-
-function corsHeaders() {
-  return {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, X-FreeApp-Admin-Key"
-  };
-}
-
-function json(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: {
-      "Content-Type": "application/json; charset=utf-8",
-      "Cache-Control": "no-store",
-      ...corsHeaders()
-    }
-  });
-}
-
-
-function detectVerificationChallenge(url, page) {
-  const combined = (String(url || "") + " " + String(page?.title || "") + " " + String(page?.text || "")).toLowerCase();
-  const patterns = [
-    { kind: "captcha", re: /captcha|hcaptcha|recaptcha|turnstile challenge|verify you are human|prove you are human|i am not a robot/ },
-    { kind: "anti-bot", re: /checking your browser|checking if the site connection is secure|unusual traffic|automated requests|bot detection|access denied.*automated/ },
-    { kind: "login", re: /sign in to continue|log in to continue|authentication required|session expired|please log in/ }
-  ];
-  for (const item of patterns) if (item.re.test(combined)) return { detected: true, kind: item.kind };
-  return { detected: false, kind: null };
-}
-
-async function captureBrowserScreenshot(page) {
-  try {
-    const bytes = await page.screenshot({ type: "jpeg", quality: 45, fullPage: false });
-    return "data:image/jpeg;base64," + bytesToBase64(new Uint8Array(bytes));
-  } catch { return null; }
-}
-
-function validatePublicWebsiteUrl(raw) {
-  if (typeof raw !== "string" || !raw.trim()) throw new Error("Enter the full website address, including https://.");
-  let target;
-  try { target = new URL(raw.trim()); } catch { throw new Error("That website address is not valid."); }
-  if (!["http:", "https:"].includes(target.protocol)) throw new Error("Only public HTTP or HTTPS websites are supported.");
-  if (target.username || target.password) throw new Error("Do not include a username or password in the website URL.");
-  const host = target.hostname.toLowerCase();
-  if (!host || host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") ||
-      host === "metadata.google.internal" || host === "169.254.169.254" ||
-      /^(127\.|10\.|192\.168\.|0\.|169\.254\.)/.test(host) ||
-      /^172\.(1[6-9]|2[0-9]|3[01])\./.test(host) || host.includes(":")) {
-    throw new Error("Private, local-network, and link-local addresses are blocked. Use a public website address.");
-  }
-  target.hash = "";
-  return target;
-}
-
-async function readBrowserPage(page) {
-  const title = await page.title().catch(() => "");
-  const text = await page.evaluate(() => {
-    const root = document.body;
-    if (!root) return "";
-    return (root.innerText || root.textContent || "").replace(/\\n{3,}/g, "\\n\\n").trim();
-  }).catch(() => "");
-  return { title, text };
-}
