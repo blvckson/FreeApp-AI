@@ -40,7 +40,7 @@ test("programming provider failure is explicit and sanitizes credential-like val
 test("programming routing includes full app-building while preserving debugging paths", () => {
   const declaration = source.match(/function isFocusedCodeGenerationRequest\(messages\) \{[\s\S]*?\n\}/);
   assert.ok(declaration, "focused code-generation classifier must exist");
-  const classify = new Function("isComplexAppBuildRequest", "return (" + declaration[0] + ");")((prompt) => /\\b(build|create|implement|design|architect|develop|make)\\b/i.test(prompt) && /\\b(app|application|android|ios|web app|mobile app|software system|mvp)\\b/i.test(prompt));
+  const classify = new Function("isComplexAppBuildRequest", "return (" + declaration[0] + ");")((prompt) => /\b(build|create|implement|design|architect|develop|make)\b/i.test(prompt) && /\b(app|application|android|ios|web app|mobile app|software system|mvp)\b/i.test(prompt));
   assert.equal(classify([{role:"user",content:"Write a Python function first_non_repeating(s)."}]), true);
   assert.equal(classify([{role:"user",content:"Build a full Android app."}]), true);
   assert.equal(classify([{role:"user",content:"Create a complete inventory management application with database and tests."}]), true);
@@ -50,6 +50,6 @@ test("programming routing includes full app-building while preserving debugging 
 });
 
 test("app-building requests receive the extended programming timeout", () => {
-  assert.match(source, /return isFocusedCodeGenerationRequest\\(messages\\) \\|\\|/);
-  assert.match(source, /providerTimeoutMs: isProgrammingGenerationRequest\\(messages\\) \\? 22000 : 10000/);
+  assert.match(source, /return isFocusedCodeGenerationRequest\(messages\) \|\|/);
+  assert.match(source, /providerTimeoutMs: isProgrammingGenerationRequest\(messages\) \\? 22000 : 10000/);
 });
