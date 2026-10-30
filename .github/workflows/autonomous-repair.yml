@@ -59,7 +59,10 @@ jobs:
           [ "$SOURCE_CONCLUSION" = "failure" ] || { echo "Source run did not fail; no repair needed"; exit 1; }
           if [ "$SOURCE_WORKFLOW" = "Build FreeApp AI APK" ] && [ "$SOURCE_BRANCH" = "main" ]; then
             TARGET_BRANCH="main"
-          elif [ "$SOURCE_WORKFLOW" = "FreeApp AI Agent - Build and Diagnose" ] && [ "$SOURCE_EVENT" = "pull_request" ] && [ "$PR_BASE" = "main" ]; then
+          elif [ "$SOURCE_WORKFLOW" = "FreeApp AI Agent - Build and Diagnose" ] && {
+            { [ "$SOURCE_EVENT" = "pull_request" ] && [ "$PR_BASE" = "main" ]; } ||
+            { [ "$SOURCE_EVENT" = "workflow_dispatch" ] && [[ "$SOURCE_BRANCH" == ai-engineering/run-* ]]; }
+          }; then
             TARGET_BRANCH="$SOURCE_BRANCH"
           else
             echo "Unsupported workflow/event/branch combination; refusing repair."
