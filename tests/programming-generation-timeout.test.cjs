@@ -40,3 +40,15 @@ test("provider failure does not turn unrelated research evidence into a programm
   assert.match(source, /function buildProgrammingProviderFailure\(prompt, modelError\)/);
   assert.match(source, /No program was generated, compiled, or tested in this request/);
 });
+
+test("focused programming requests skip the separate engineering planner", () => {
+  const source = fs.readFileSync(path.join(__dirname, "..", "worker.js"), "utf8");
+  const declaration = source.match(/function shouldUseEngineeringPlanner\(prompt, buildMode = false\) \{[\s\S]*?\n\}/);
+  assert.ok(declaration, "planner gate must exist");
+  const shouldUseEngineeringPlanner = new Function("return (" + declaration[0] + ");")();
+  assert.equal(shouldUseEngineeringPlanner("Write a Python function first_non_repeating(s)."), false);
+  assert.equal(shouldUseEngineeringPlanner("Debug this JavaScript function."), false);
+  assert.equal(shouldUseEngineeringPlanner("Build a full application with several modules."), true);
+  assert.equal(shouldUseEngineeringPlanner("Inspect the whole repository and implement the deployment pipeline."), true);
+  assert.equal(shouldUseEngineeringPlanner("Write a small function.", true), true);
+});
