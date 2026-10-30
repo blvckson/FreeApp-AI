@@ -141,7 +141,7 @@ jobs:
               Path("proposed.patch").write_text("")
               Path("repair-report.md").write_text("# Autonomous repair result\n\nThe model did not return an applicable patch. No source files were changed.\n")
           else:
-              patch = answer[start:].split("\\n```", 1)[0].strip()
+              patch = answer[start:].split("\n```", 1)[0].strip()
               if patch.startswith("--- a/") and "diff --git " not in patch:
                   # git apply accepts unified diffs with ---/+++ headers.
                   pass
@@ -235,8 +235,8 @@ jobs:
           fi
           git commit -m "Propose AI-assisted repair for failed build $RUN_ID"
           git push origin "$BRANCH"
-          gh pr create --repo "$GH_REPO" --base "$TARGET_BRANCH" --head "$BRANCH" \\
-            --title "AI-proposed repair for failed validation run $RUN_ID" \\
+          gh pr create --repo "$GH_REPO" --base "$TARGET_BRANCH" --head "$BRANCH" \
+            --title "AI-proposed repair for failed validation run $RUN_ID" \
             --body "## Automated repair proposal\n\n- Failed validation run: https://github.com/$GH_REPO/actions/runs/$RUN_ID\n- Source revision: `$SOURCE_SHA`\n- Target branch: `$TARGET_BRANCH`\n- The proposal was generated from the failed run logs by the existing FreeApp AI endpoint.\n- JavaScript syntax checks, Android debug build, and available unit tests passed on the proposed patch before this PR was opened.\n\nThis PR is **not auto-merged**. Review the code and runtime behaviour before merging. Cloudflare configuration and worker.js were excluded from the patch scope."
 
       - name: Upload repair evidence
