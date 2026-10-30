@@ -172,6 +172,51 @@ jobs:
           echo "Android validation did not finish within the 30-minute observation window."
           exit 1
 
+      - name: Request autonomous repair proposal when validation fails
+        if: steps.checks.outputs.conclusion != 'success' && steps.checks.outputs.run_id != ''
+        id: repair
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          FAILED_RUN_ID: ${{ steps.checks.outputs.run_id }}
+        run: |
+          set -euo pipefail
+          echo "started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          gh api "repos/$GH_REPO/actions/workflows/autonomous-repair.yml/dispatches" \
+            --method POST -f ref=main -f "inputs[run_id]=$FAILED_RUN_ID"
+          echo "Autonomous repair proposal workflow dispatched for failed validation run $FAILED_RUN_ID."
+
+      - name: Wait for repair diagnosis and proposal
+        if: steps.checks.outputs.conclusion != 'success' && steps.checks.outputs.run_id != ''
+        id: repair_result
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          STARTED_AT: ${{ steps.repair.outputs.started_at }}
+          FAILED_RUN_ID: ${{ steps.checks.outputs.run_id }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 100); do
+            RUNS="$(gh api "repos/$GH_REPO/actions/workflows/autonomous-repair.yml/runs?event=workflow_dispatch&per_page=20")"
+            REPAIR_RUN="$(printf '%s' "$RUNS" | jq -r --arg start "$STARTED_AT" '
+              [.workflow_runs[] | select(.created_at >= $start)] |
+              sort_by(.created_at) | last | .id // empty')"
+            if [ -n "$REPAIR_RUN" ]; then
+              STATUS="$(gh api "repos/$GH_REPO/actions/runs/$REPAIR_RUN" --jq '.status')"
+              CONCLUSION="$(gh api "repos/$GH_REPO/actions/runs/$REPAIR_RUN" --jq '.conclusion // ""')"
+              if [ "$STATUS" = "completed" ]; then
+                echo "run_id=$REPAIR_RUN" >> "$GITHUB_OUTPUT"
+                echo "conclusion=$CONCLUSION" >> "$GITHUB_OUTPUT"
+                PR_JSON="$(gh pr list --repo "$GH_REPO" --head "ai-repair/run-$FAILED_RUN_ID" --json number,url --limit 1)"
+                echo "pr_url=$(printf '%s' "$PR_JSON" | jq -r '.[0].url // empty')" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+            fi
+            sleep 15
+          done
+          echo "Repair proposal workflow did not finish within its observation window."
+          exit 1
+
       - name: Record verified cycle result
         if: always()
         env:
@@ -181,6 +226,9 @@ jobs:
           PR_NUMBER: ${{ steps.pr.outputs.number }}
           CHECK_RESULT: ${{ steps.checks.outputs.conclusion }}
           VALIDATION_RUN: ${{ steps.checks.outputs.run_id }}
+          REPAIR_RUN: ${{ steps.repair_result.outputs.run_id }}
+          REPAIR_RESULT: ${{ steps.repair_result.outputs.conclusion }}
+          REPAIR_PR: ${{ steps.repair_result.outputs.pr_url }}
         run: |
           {
             echo
@@ -191,12 +239,15 @@ jobs:
             echo "- Pull request: ${PR_URL:-not created}"
             echo "- Isolated build/test run: ${VALIDATION_RUN:-not completed}"
             echo "- Build, unit-test and diagnostic result: ${CHECK_RESULT:-failed or not reached}"
+            echo "- Repair workflow: ${REPAIR_RUN:-not needed or not started}"
+            echo "- Repair proposal result: ${REPAIR_RESULT:-not needed or not completed}"
+            echo "- Repair PR: ${REPAIR_PR:-no repair PR created}"
             echo
             if [ "$CHECK_RESULT" = "success" ]; then
               echo "**Result: ready for review.** Research, repository-aware implementation, isolated commit/PR, and a separately dispatched Android build/test validation completed. Review and merge the PR to start the main-branch APK build and deployment/benchmark workflows."
               echo "The merge remains a human approval gate. Deployment and release publication are not performed by this coordinator."
             else
-              echo "**Result: not verified.** Inspect the linked engineering run and PR checks. No merge or release is authorized."
+              echo "**Result: not verified.** The cycle requested a bounded repair proposal where possible. Inspect the failed validation and repair evidence. No merge or release is authorized."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
