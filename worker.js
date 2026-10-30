@@ -524,7 +524,7 @@ For substantial application requests, deliver implementation, not generic advice
           researchSourceCount: sources.length,
           qualityReviewUsed,
           modelIndependentFallback,
-          responseMode: modelIndependentFallback ? "research-evidence-only" : "language-model",
+          responseMode: modelIndependentFallback ? (engineeringTask ? "deterministic-engineering-fallback" : "research-evidence-only") : "language-model",
           engineeringTask,
           engineeringPlan,
           complexity: complexity.level,
@@ -1162,8 +1162,7 @@ function buildResearchOnlyFallback(prompt, brief, modelError) {
       "Official sources: https://developers.cloudflare.com/workers-ai/models/ and https://developers.cloudflare.com/changelog/product/workers-ai/"
     );
   }
-  lines.push("", "### Service status", "Generation request did not complete; the answer above is a deterministic source-based fallback, not model-generated.");
-  lines.push("", "### Service status", "Generation failure: " + diagnostic, "Research was attempted independently. No claim of live verification is made beyond the source register returned with this response.");
+  lines.push("", "### Service status", "Generation request did not complete; this is a deterministic source-based fallback, not model-generated.", "Technical diagnostic: " + diagnostic, "Research was attempted independently; only retrieved source material is represented as evidence.");
   return lines.join("\n");
 }
 
