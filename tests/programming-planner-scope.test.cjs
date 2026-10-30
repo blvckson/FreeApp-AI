@@ -7,10 +7,12 @@ const match = source.match(/function shouldUseEngineeringPlanner\(prompt, buildM
 assert.ok(match, "planner scope helper must exist");
 const shouldUseEngineeringPlanner = new Function("return (" + match[0] + ");")();
 
-test("focused programming requests skip the separate planning inference", () => {
+test("focused code generation skips planning while debugging and repairs retain it", () => {
   assert.equal(shouldUseEngineeringPlanner("Write a Python function first_non_repeating(s)."), false);
-  assert.equal(shouldUseEngineeringPlanner("Debug this JavaScript function."), false);
   assert.equal(shouldUseEngineeringPlanner("Implement a small algorithm."), false);
+  assert.equal(shouldUseEngineeringPlanner("Debug this JavaScript function."), true);
+  assert.equal(shouldUseEngineeringPlanner("Fix this compile error."), true);
+  assert.equal(shouldUseEngineeringPlanner("Refactor this class."), true);
 });
 
 test("complex application and repository work retain the planning inference", () => {
