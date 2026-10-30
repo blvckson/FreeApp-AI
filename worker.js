@@ -912,7 +912,7 @@ function engineeringDeliverableGaps(prompt, response, buildMode = false) {
   if (asksForTests && !(/\b(assert|expect\(|assert\.|should equal|expected output)\b/i.test(answer) && /\b(test|tests|test case|acceptance)\b/i.test(answer))) {
     gaps.push("executable tests with concrete assertions and expected outcomes");
   }
-  if (/\b(algorithm|complexity|performance|efficient|cycle detection|graph)\b/.test(request) && !/\b(time complexity|space complexity|o\s*\(/i.test(answer)) {
+  if (/\b(algorithm|complexity|performance|efficient|cycle detection|graph)\b/.test(request) && !/\b(time complexity|space complexity|o\s*\([^)]*\))/i.test(answer)) {
     gaps.push("time and space complexity analysis");
   }
   if (/\b(api|endpoint|input|validation|request body)\b/.test(request) && !/\b(validat|reject|invalid input|400|404|422)\b/i.test(answer)) {
