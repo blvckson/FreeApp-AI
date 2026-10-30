@@ -473,11 +473,7 @@ For substantial application requests, deliver implementation, not generic advice
         // A final deliverable gate catches obviously incomplete engineering drafts.
         // It requests one focused repair pass; it never treats generated code as tested.
         if (!modelIndependentFallback && (codeTask || buildMode)) {
-          const gaps = [];
-          if (!/\x60\x60\x60/.test(responseText)) gaps.push("complete fenced implementation or a clear explanation why code is not applicable");
-          if (!/\b(test|assert|expected output|acceptance criteria)\b/i.test(responseText)) gaps.push("meaningful tests with concrete expected outcomes");
-          if (buildMode && !/\b(architecture|module|data flow)\b/i.test(responseText)) gaps.push("architecture and feature-to-module mapping");
-          if (buildMode && !/\b(build|gradle|install|run)\b/i.test(responseText)) gaps.push("platform-specific build and run steps");
+          const gaps = engineeringDeliverableGaps(prompt, responseText, buildMode);
           if (gaps.length) {
             try {
               const repair = await runChatModel(env, [
@@ -486,9 +482,7 @@ For substantial application requests, deliver implementation, not generic advice
                 { role: "user", content: "FINAL COMPLETENESS CHECK: revise the draft to address these omissions: " + gaps.join("; ") + ". Preserve correct material, provide complete coherent implementation rather than placeholders when code is requested, and include meaningful tests with expected outcomes. For app-building, map requirements to modules and include build/run steps. Never claim execution, compilation, or test success without actual evidence. Return the complete final answer." }
               ], { max_tokens: buildMode ? 7000 : 6000, temperature: 0.1 });
               const candidate = sanitizeAssistantOutput(repair?.response || "");
-              const complete = /\x60\x60\x60/.test(candidate) &&
-                /\b(test|assert|expected output|acceptance criteria)\b/i.test(candidate) &&
-                (!buildMode || (/\b(architecture|module|data flow)\b/i.test(candidate) && /\b(build|gradle|install|run)\b/i.test(candidate)));
+              const complete = engineeringDeliverableGaps(prompt, candidate, buildMode).length === 0;
               if (complete && candidate.length > 120) {
                 responseText = candidate;
                 qualityReviewUsed = true;
@@ -813,6 +807,35 @@ async function researchWeb(query) {
   return selected;
 }
 
+function selectIndependentResearchSources(rankedItems, limit = 8, perDomainLimit = 2) {
+  const items = Array.isArray(rankedItems) ? rankedItems : [];
+  const maxItems = Math.max(1, Math.min(Number(limit) || 8, 12));
+  const maxPerDomain = Math.max(1, Math.min(Number(perDomainLimit) || 2, 3));
+  const selected = [];
+  const counts = new Map();
+
+  // First pass: maximise independent publisher coverage.
+  for (const item of items) {
+    if (!item || !Array.isArray(item.relevant) || item.relevant.length === 0) continue;
+    if (!item.host || counts.has(item.host)) continue;
+    selected.push(item);
+    counts.set(item.host, 1);
+    if (selected.length >= maxItems) return selected;
+  }
+
+  // Second pass: add another useful page from an already represented domain
+  // only when additional independent domains were not available.
+  for (const item of items) {
+    if (!item || !Array.isArray(item.relevant) || item.relevant.length === 0) continue;
+    const count = counts.get(item.host) || 0;
+    if (count === 0 || count >= maxPerDomain || selected.includes(item)) continue;
+    selected.push(item);
+    counts.set(item.host, count + 1);
+    if (selected.length >= maxItems) break;
+  }
+  return selected;
+}
+
 function buildIndependentEvidenceBrief(query, sources) {
   // Deterministic evidence analysis runs inside FreeApp AI before language
   // generation. It does not depend on another AI provider and never treats a
@@ -848,14 +871,10 @@ function buildIndependentEvidenceBrief(query, sources) {
   }
 
   ranked.sort((a,b) => b.score-a.score);
-  const chosen = [];
-  const domains = new Set();
-  for (const item of ranked) {
-    if (domains.has(item.host) && chosen.length < 4) continue;
-    chosen.push(item);
-    domains.add(item.host);
-    if (chosen.length >= 8) break;
-  }
+  // Do not count a readable page as evidence unless it contains query-relevant
+  // sentences. Prefer independent domains before allowing a second page from
+  // any one publisher; this prevents one site from inflating source coverage.
+  const chosen = selectIndependentResearchSources(ranked, 8, 2);
 
   const claims = [];
   for (const item of chosen) {
@@ -879,6 +898,44 @@ function buildIndependentEvidenceBrief(query, sources) {
     })),
     evidence: claims.slice(0,18)
   };
+}
+
+function engineeringDeliverableGaps(prompt, response, buildMode = false) {
+  const request = String(prompt || "").toLowerCase();
+  const answer = String(response || "");
+  const lower = answer.toLowerCase();
+  const gaps = [];
+  const hasCode = /```[a-z0-9_-]*\n[\s\S]+?```/i.test(answer);
+  if (!hasCode) gaps.push("complete fenced code or a clear reason implementation is not applicable");
+
+  const asksForTests = /\b(test|tests|testing|regression|acceptance)\b/.test(request);
+  if (asksForTests && !(/\b(assert|expect\(|assert\.|should equal|expected (?:output|result))\b/i.test(answer) && /\b(test|tests|test case|acceptance)\b/i.test(answer))) {
+    gaps.push("executable tests with concrete assertions and expected outcomes");
+  }
+  if (/\b(algorithm|complexity|performance|efficient|cycle detection|graph)\b/.test(request) && !/\b(time complexity|space complexity|o\s*\([^)]*\))/i.test(answer)) {
+    gaps.push("time and space complexity analysis");
+  }
+  if (/\b(api|endpoint|input|validation|request body)\b/.test(request) && !/\b(validat|reject|invalid input|400|404|422)\b/i.test(answer)) {
+    gaps.push("input and unknown-endpoint validation with explicit error behavior");
+  }
+  if (buildMode) {
+    if (!/\b(architecture|module|data flow)\b/i.test(answer)) gaps.push("architecture and data-flow explanation");
+    if (/\b(database|schema|persist|storage)\b/.test(request) && !/\b(schema|primary key|foreign key|constraint|index|migration)\b/i.test(answer)) {
+      gaps.push("concrete database schema and integrity constraints");
+    }
+    if (/\b(stock|inventory|payment|transaction|order)\b/.test(request) && !/\b(transaction|atomic|rollback|idempotenc)\b/i.test(answer)) {
+      gaps.push("atomic transaction, rollback and duplicate-operation handling");
+    }
+    if (/\b(offline|sync|synchroni[sz]ation|network loss)\b/.test(request) && !/\b(offline|sync|conflict|retry|reconcil)\b/i.test(answer)) {
+      gaps.push("offline behavior, synchronization and conflict recovery");
+    }
+    const acceptanceCount = (answer.match(/\b(?:acceptance test|test case|scenario)\s*#?\s*\d+/gi) || []).length;
+    if (/\b(acceptance tests|test cases|at least eight|8 tests)\b/.test(request) && acceptanceCount < 8) {
+      gaps.push("eight individually numbered acceptance tests with expected results");
+    }
+    if (!/\b(build|gradle|install|run|npm|command)\b/i.test(answer)) gaps.push("exact build and run instructions");
+  }
+  return [...new Set(gaps)];
 }
 
 function isSoftwareEngineeringRequest(prompt) {
