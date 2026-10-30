@@ -26,6 +26,7 @@ test("programming requests receive a larger output cap while other requests stay
 });
 
 test("provider failure for programming returns a diagnostic instead of unrelated research text", () => {
-  assert.match(source, /else if \(codeTask\) \{[\s\S]{0,700}buildProgrammingProviderFailure\(prompt, modelError\)/);
+  assert.match(source, /if \(codeTask \|\| buildMode\) \{[\s\S]{0,700}buildProgrammingProviderFailure\(prompt, modelError\)/);
+  assert.match(source, /function buildProgrammingProviderFailure\(prompt, modelError\)/);
   assert.match(source, /No program was generated, compiled, or tested in this request/);
 });
