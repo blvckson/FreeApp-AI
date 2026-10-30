@@ -1043,7 +1043,7 @@ function buildResearchOnlyFallback(prompt, brief, modelError) {
       "3. Foreground service types | Background work — https://developer.android.com/develop/background-work/services/fgs/service-types (mediaProjection service type and runtime prerequisites).",
       "",
       "This answer is a deterministic source-based fallback because live model generation failed. The official URLs are provided directly; no claim is made that the app itself was inspected."
-    ].join("\\n");
+    ].join("\n");
   }
   const lines = [
     "## Independent research result",
