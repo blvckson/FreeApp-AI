@@ -4,7 +4,7 @@ on:
     paths: ["worker.js", "public/app.js", "public/coding-agent-guard.js", "public/index.html", "tests/**", "package.json", ".github/workflows/coding-agent-validation.yml"]
   push:
     branches: [main]
-    paths: ["public/app.js", "public/coding-agent-guard.js", "public/index.html", "tests/**", "package.json", ".github/workflows/coding-agent-validation.yml"]
+    paths: ["worker.js", "public/app.js", "public/coding-agent-guard.js", "public/index.html", "tests/**", "package.json", ".github/workflows/coding-agent-validation.yml"]
 permissions:
   contents: read
 jobs:
