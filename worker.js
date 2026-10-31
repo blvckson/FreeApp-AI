@@ -212,7 +212,7 @@ export default {
             files.push({ path: paths[i], available: false, error: "Path is not a readable text file." });
             continue;
           }
-          const content = decodeBase64Utf8(item.content.replace(/\\s/g, ""));
+          const content = decodeBase64Utf8(item.content.replace(/\s/g, ""));
           files.push({ path: paths[i], available: true, sha: item.sha, content: content.slice(0, 24000), truncated: content.length > 24000 });
         }
         return json({
@@ -1130,8 +1130,8 @@ function buildAppBuildingFallback(prompt, modelError) {
   const lower = text.toLowerCase();
   if (!/android/.test(lower) || !/inventory/.test(lower) || !/stock/.test(lower)) return "";
   const diagnostic = String(modelError?.message || modelError || "Unknown generation failure.")
-    .replace(/(authorization\\s*:\\s*bearer\\s+)[^\\s,;]+/gi, "$1[redacted]")
-    .replace(/((?:api[_-]?key|token|secret)\\s*[:=]\\s*)[^\\s|,;]+/gi, "$1[redacted]")
+    .replace(/(authorization\s*:\s*bearer\s+)[^\s,;]+/gi, "$1[redacted]")
+    .replace(/((?:api[_-]?key|token|secret)\s*[:=]\s*)[^\s|,;]+/gi, "$1[redacted]")
     .slice(0, 500);
   const fence = String.fromCharCode(96).repeat(3);
   return [
@@ -1231,7 +1231,7 @@ function buildAppBuildingFallback(prompt, modelError) {
     "",
     "### Provider diagnostic",
     "Normal generation route failed. Diagnostic: " + diagnostic
-  ].join("\\n");
+  ].join("\n");
 }
 
 function buildResearchOnlyFallback(prompt, brief, modelError) {
