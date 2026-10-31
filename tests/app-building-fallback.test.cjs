@@ -20,6 +20,8 @@ test("Android inventory fallback supplies architecture, schema, transaction, syn
     "not compiled or run", "provider timeout"
   ]) assert.match(answer, new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
   assert.ok((answer.match(/Acceptance test —/g) || []).length >= 8);
+  assert.match(answer, /No configured generation route completed|normal model-generation route failed/i);
+  assert.doesNotMatch(answer, /all configured AI providers failed|AI providers? (?:are|is) unavailable/i);
 });
 
 test("app-building fallback is limited to Android inventory and stock requests", () => {

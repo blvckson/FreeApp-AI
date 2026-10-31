@@ -1044,6 +1044,7 @@ function shouldUseEngineeringPlanner(prompt, buildMode = false) {
 
 function buildProgrammingProviderFailure(prompt, modelError) {
   const diagnostic = String(modelError?.message || modelError || "Unknown generation failure.")
+    .replace(/all configured AI providers failed/gi, "No configured generation route completed")
     .replace(/(authorization\s*:\s*bearer\s+)[^\s,;]+/gi, "$1[redacted]")
     .replace(/((?:api[_-]?key|token|secret)\s*[:=]\s*)[^\s|,;]+/gi, "$1[redacted]")
     .replace(/([?&](?:key|api_key|token)=)[^&\s]+/gi, "$1[redacted]")
