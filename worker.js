@@ -1277,17 +1277,18 @@ function assessRequestComplexity(prompt, history, sourceCount, imageCount) {
 }
 
 async function runChatModel(env, messages, options = {}) {
+  const programming = isFocusedCodeGenerationRequest(messages);
   const settings = {
     messages,
     max_tokens: options.max_tokens || 4096,
     temperature: options.temperature ?? 0.2,
     // Code tasks receive a longer generation window; all other categories
     // keep the existing timeout budget and provider ordering.
-    programming: isFocusedCodeGenerationRequest(messages),
-    providerTimeoutMs: settings.programming ? 22000 : 10000,
+    programming,
+    providerTimeoutMs: programming ? 22000 : 10000,
     // A full timeout is evidence that the route is not responding; do not
     // immediately spend the same long budget repeating that same request.
-    retryNetworkTimeouts: !settings.programming
+    retryNetworkTimeouts: !programming
   };
 
   const providerErrors = [];
