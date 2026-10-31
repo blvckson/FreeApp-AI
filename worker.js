@@ -720,9 +720,11 @@ ${JSON.stringify(executed).slice(0, 3000)}
       return json({
         ok: true,
         service: "FreeApp AI",
-        aiConfigured: Boolean(env.AI),
+        aiConfigured: Boolean(env.FREEAPP_INTERNAL_PROVIDER_URL || env.AI),
+        internalProviderConfigured: Boolean(env.FREEAPP_INTERNAL_PROVIDER_URL),
+        internalOnly: String(env.FREEAPP_INTERNAL_ONLY || "").toLowerCase() === "true",
         webResearch: true,
-        model: env.FREEAPP_AI_MODEL || DEFAULT_MODEL
+        model: env.FREEAPP_INTERNAL_MODEL || env.FREEAPP_AI_MODEL || DEFAULT_MODEL
       });
     }
 
@@ -1322,6 +1324,22 @@ async function runChatModel(env, messages, options = {}) {
   };
 
   const providerErrors = [];
+  // FreeApp AI's self-hosted model runtime is the preferred inference engine.
+  // External providers remain optional compatibility fallbacks unless strict
+  // internal-only mode is enabled.
+  if (env.FREEAPP_INTERNAL_PROVIDER_URL) {
+    try {
+      return await runInternalModelProvider(env, settings);
+    } catch (error) {
+      const detail = String(error?.message || error);
+      providerErrors.push("FreeApp internal model: " + detail.slice(0, 180));
+      if (String(env.FREEAPP_INTERNAL_ONLY || "").toLowerCase() === "true") {
+        throw new Error("FreeApp AI internal model provider failed in internal-only mode. " + detail.slice(0, 500));
+      }
+    }
+  } else if (String(env.FREEAPP_INTERNAL_ONLY || "").toLowerCase() === "true") {
+    throw new Error("FreeApp AI is configured for internal-only inference, but FREEAPP_INTERNAL_PROVIDER_URL is missing.");
+  }
   // For programming requests, use an explicitly configured Gemini key first.
   // If that route fails, continue to the independent Kilo and LLM7 providers.
   let geminiAttempted = false;
@@ -1460,6 +1478,35 @@ async function runChatModel(env, messages, options = {}) {
   }
 
   throw new Error("All configured AI providers failed. " + providerErrors.join(" | ").slice(0, 900));
+}
+
+async function runInternalModelProvider(env, settings) {
+  const base = String(env.FREEAPP_INTERNAL_PROVIDER_URL || "").trim().replace(/\\/+$/, "");
+  if (!/^https?:\\/\\//i.test(base)) throw new Error("FREEAPP_INTERNAL_PROVIDER_URL must be an HTTP(S) URL.");
+  const timeoutMs = Math.max(5000, Math.min(Number(env.FREEAPP_INTERNAL_TIMEOUT_MS) || 90000, 180000));
+  const headers = { "content-type": "application/json", "accept": "application/json" };
+  if (env.FREEAPP_INTERNAL_API_KEY) headers.authorization = "Bearer " + String(env.FREEAPP_INTERNAL_API_KEY).trim();
+  const response = await fetch(base + "/v1/chat/completions", {
+    method: "POST", headers,
+    body: JSON.stringify({
+      model: String(env.FREEAPP_INTERNAL_MODEL || "freeapp-local"),
+      messages: settings.messages,
+      max_tokens: Math.min(Number(settings.max_tokens) || 4096, settings.programming ? 7000 : 5000),
+      temperature: settings.temperature ?? 0.2,
+      stream: false
+    }),
+    signal: AbortSignal.timeout(timeoutMs)
+  });
+  const raw = await response.text();
+  let body = {};
+  try { body = raw ? JSON.parse(raw) : {}; } catch {}
+  if (!response.ok) {
+    const detail = String(body?.error?.message || body?.message || raw || ("HTTP " + response.status));
+    throw new Error("HTTP " + response.status + ": " + detail.slice(0, 240));
+  }
+  const answer = extractProviderText(body);
+  if (!answer) throw new Error("Internal model returned no assistant text.");
+  return { response: answer, provider: "FreeApp AI Internal Model" };
 }
 
 function extractProviderText(body) {
