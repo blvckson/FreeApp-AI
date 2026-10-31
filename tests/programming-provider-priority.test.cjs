@@ -5,7 +5,7 @@ const path = require("node:path");
 const source = fs.readFileSync(path.join(__dirname, "..", "worker.js"), "utf8");
 
 test("programming requests prioritize configured Gemini before anonymous gateways", () => {
-  const programming = source.indexOf("programming: isFocusedCodeGenerationRequest(messages)");
+  const programming = source.indexOf("const programming = isProgrammingGenerationRequest(messages)");
   const priority = source.indexOf("if (settings.programming && env.GEMINI_API_KEY)");
   const anonymous = source.indexOf("const kiloAttempts", priority);
   assert.ok(programming >= 0, "programming mode must be explicit");
