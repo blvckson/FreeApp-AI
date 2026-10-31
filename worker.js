@@ -1481,8 +1481,11 @@ async function runChatModel(env, messages, options = {}) {
 }
 
 async function runInternalModelProvider(env, settings) {
-  const base = String(env.FREEAPP_INTERNAL_PROVIDER_URL || "").trim().replace(/\\/+$/, "");
-  if (!/^https?:\\/\\//i.test(base)) throw new Error("FREEAPP_INTERNAL_PROVIDER_URL must be an HTTP(S) URL.");
+  let base = String(env.FREEAPP_INTERNAL_PROVIDER_URL || "").trim();
+  while (base.endsWith("/")) base = base.slice(0, -1);
+  let parsedBase;
+  try { parsedBase = new URL(base); } catch { throw new Error("FREEAPP_INTERNAL_PROVIDER_URL must be an HTTP(S) URL."); }
+  if (parsedBase.protocol !== "https:" && parsedBase.protocol !== "http:") throw new Error("FREEAPP_INTERNAL_PROVIDER_URL must be an HTTP(S) URL.");
   const timeoutMs = Math.max(5000, Math.min(Number(env.FREEAPP_INTERNAL_TIMEOUT_MS) || 90000, 180000));
   const headers = { "content-type": "application/json", "accept": "application/json" };
   if (env.FREEAPP_INTERNAL_API_KEY) headers.authorization = "Bearer " + String(env.FREEAPP_INTERNAL_API_KEY).trim();
