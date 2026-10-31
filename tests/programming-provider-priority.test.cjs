@@ -38,9 +38,11 @@ test("programming provider failure is explicit and sanitizes credential-like val
 });
 
 test("programming-only routing classifier excludes debugging and app-building", () => {
+  const focused = source.match(/function isFocusedCodeGenerationRequest\(messages\) \{[\s\S]*?\n\}/);
   const declaration = source.match(/function isProgrammingGenerationRequest\(messages\) \{[\s\S]*?\n\}/);
   assert.ok(declaration, "focused code-generation classifier must exist");
-  const classify = new Function("return (" + declaration[0] + ");")();
+  assert.ok(focused && declaration, "programming classifiers must exist");
+  const classify = new Function(focused[0] + "\n" + declaration[0] + "\nreturn isProgrammingGenerationRequest;")();
   assert.equal(classify([{role:"user",content:"Write a Python function first_non_repeating(s)."}]), true);
   assert.equal(classify([{role:"user",content:"Debug this Python function."}]), false);
   assert.equal(classify([{role:"user",content:"Fix this JavaScript bug."}]), false);
@@ -50,9 +52,11 @@ test("programming-only routing classifier excludes debugging and app-building", 
 
 
 test("app-building keeps the normal provider timeout and retry policy", () => {
+  const focused = source.match(/function isFocusedCodeGenerationRequest\(messages\) \{[\s\S]*?\n\}/);
   const declaration = source.match(/function isProgrammingGenerationRequest\(messages\) \{[\s\S]*?\n\}/);
   assert.ok(declaration, "focused programming classifier must exist");
-  const classify = new Function("return (" + declaration[0] + ");")();
+  assert.ok(focused && declaration, "programming classifiers must exist");
+  const classify = new Function(focused[0] + "\n" + declaration[0] + "\nreturn isProgrammingGenerationRequest;")();
   const appBuild = [{role:"user",content:"Build a full Android app with offline sync and database persistence."}];
   const programming = [{role:"user",content:"Write a Python function to sort a list."}];
   assert.equal(classify(appBuild), false);
