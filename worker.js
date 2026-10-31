@@ -1000,6 +1000,12 @@ function engineeringDeliverableGaps(prompt, response, buildMode = false) {
   return [...new Set(gaps)];
 }
 
+
+function isSoftwareEngineeringRequest(prompt) {
+  const text = String(prompt || "").toLowerCase();
+  return /\b(build|create|develop|implement|code|program|debug|fix|refactor|commit|deploy|compile|apk|repository|github|workflow|pull request|software|app|application|api|backend|frontend|database|test suite)\b/i.test(text);
+}
+
 function isResearchFirstRequest(prompt) {
   const text = String(prompt || "").trim();
   if (!/\b(research|investigate|compare|evaluate|latest|current|evidence|sources|literature review|market analysis)\b/i.test(text)) return false;
@@ -1010,10 +1016,6 @@ function isResearchFirstRequest(prompt) {
     && !/\b(build|create|implement|write|generate)\s+(?:an?\s+)?(?:android|mobile|web|software)?\s*(?:app|application|program|script|software system)\b/i.test(text);
 }
 
-function isSoftwareEngineeringRequest(prompt) {
-  const text = String(prompt || "").toLowerCase();
-  return /\b(build|create|develop|implement|code|program|debug|fix|refactor|commit|deploy|compile|apk|repository|github|workflow|pull request|software|app|application|api|backend|frontend|database|test suite)\b/i.test(text);
-}
 
 function isFocusedCodeGenerationRequest(messages) {
   const userMessages = (messages || [])
