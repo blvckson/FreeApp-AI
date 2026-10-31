@@ -1492,7 +1492,7 @@ async function runInternalModelProvider(env, settings) {
   const response = await fetch(base + "/v1/chat/completions", {
     method: "POST", headers,
     body: JSON.stringify({
-      model: String(env.FREEAPP_INTERNAL_MODEL || "freeapp-local"),
+      model: String(env.FREEAPP_INTERNAL_MODEL || "freeapp-engine"),
       messages: settings.messages,
       max_tokens: Math.min(Number(settings.max_tokens) || 4096, settings.programming ? 7000 : 5000),
       temperature: settings.temperature ?? 0.2,
