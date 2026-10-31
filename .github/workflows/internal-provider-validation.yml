@@ -1,0 +1,33 @@
+name: Internal Model Provider Validation
+
+on:
+  pull_request:
+    paths:
+      - "worker.js"
+      - "provider/**"
+      - ".github/workflows/internal-provider-validation.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check Worker JavaScript syntax
+        run: node --check worker.js
+      - name: Install project dependencies
+        run: npm install --ignore-scripts
+      - name: Run existing regression tests
+        run: npm test
+      - name: Validate provider deployment files
+        run: |
+          test -s provider/docker-compose.yml
+          test -s provider/README.md
+          test -s provider/download-model.sh
+          sh -n provider/download-model.sh
