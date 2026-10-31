@@ -1300,10 +1300,15 @@ function assessRequestComplexity(prompt, history, sourceCount, imageCount) {
 }
 
 function isProgrammingGenerationRequest(messages) {
-  // Only focused source-code generation receives the programming-specific
-  // provider budget. App-building, debugging, repair and repository tasks
-  // retain their existing non-programming provider policy.
-  return isFocusedCodeGenerationRequest(messages);
+  const userMessages = (messages || [])
+    .filter(message => message && message.role === "user" && typeof message.content === "string");
+  const text = String(userMessages[userMessages.length - 1]?.content || "");
+  // Apply the engineering generation budget to focused code, debugging,
+  // app-building and repository implementation—not to research about software.
+  if (isFocusedCodeGenerationRequest(messages)) return true;
+  const asksForImplementation = /\\b(?:build|create|develop|implement|write|generate|debug|fix|repair|refactor|compile|test|modify|upgrade)\\b/i.test(text);
+  const hasSoftwareTarget = /\\b(?:source code|code|program|script|function|class|algorithm|android|ios|app|application|software|repository|github|workflow|pull request|api|backend|frontend|database|compiler|gradle|kotlin|javascript|typescript|python|java|rust|go|bug|stack trace|build error)\\b/i.test(text);
+  return asksForImplementation && hasSoftwareTarget;
 }
 
 async function runChatModel(env, messages, options = {}) {
@@ -1315,7 +1320,7 @@ async function runChatModel(env, messages, options = {}) {
     // Code tasks receive a longer generation window; all other categories
     // keep the existing timeout budget and provider ordering.
     programming,
-    providerTimeoutMs: isProgrammingGenerationRequest(messages) ? 22000 : 10000,
+    providerTimeoutMs: isProgrammingGenerationRequest(messages) ? 26000 : (Number(options.max_tokens || 0) >= 5000 ? 18000 : 14000),
     // A full timeout is evidence that the route is not responding; do not
     // immediately spend the same long budget repeating that same request.
     retryNetworkTimeouts: !isProgrammingGenerationRequest(messages)
@@ -1495,7 +1500,7 @@ async function runAnonymousOpenAIProvider(provider, settings) {
         body: JSON.stringify({
           model: provider.model,
           messages: settings.messages,
-          max_tokens: Math.min(settings.max_tokens || 4096, settings.programming ? 7000 : 4096),
+          max_tokens: Math.min(settings.max_tokens || 6000, settings.programming ? 9000 : 6000),
           temperature: settings.temperature ?? 0.2
         }),
         signal: AbortSignal.timeout(timeoutMs)
