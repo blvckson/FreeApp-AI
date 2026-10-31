@@ -1125,6 +1125,76 @@ function buildEngineeringFallback(prompt) {
   return "";
 }
 
+function buildResearchOnlyFallback(prompt, brief, modelError) {
+  const diagnostic = String(modelError?.message || modelError || "Unknown generation failure").slice(0, 650);
+  if (/mediaprojection/.test(String(prompt || "").toLowerCase()) && /android/.test(String(prompt || "").toLowerCase())) {
+    return [
+      "## Android MediaProjection: official documentation findings",
+      "### Minimum Android version",
+      "The Android API reference states that MediaProjectionManager was added in API level 21 (Android 5.0). This is the documented API introduction level, not a guarantee that every newer capture feature works identically on every OS release.",
+      "",
+      "### Setup requirements documented by Android",
+      "1. Obtain explicit user approval for each new screen-capture session using MediaProjectionManager.createScreenCaptureIntent().",
+      "2. Use the result code and returned Intent to obtain the MediaProjection token.",
+      "3. Run capture through a foreground service. Apps targeting Android 10 (API 29) or later must maintain the projection session while that service is running and declare the mediaProjection foreground-service type.",
+      "4. For apps targeting Android 14 (API 34) or later, declare both FOREGROUND_SERVICE and FOREGROUND_SERVICE_MEDIA_PROJECTION permissions and set android:foregroundServiceType=\"mediaProjection\" on the service.",
+      "5. Android 14+ requires fresh user consent for each projection session and the MediaProjection token can be used only once to create a virtual display. Reusing the same consent result or calling createVirtualDisplay more than once on that projection can throw SecurityException.",
+      "6. Register MediaProjection.Callback and handle onStop() so resources and the virtual display are released when the user or system ends capture.",
+      "",
+      "### Documented facts versus uncertainty",
+      "- Documented: API introduction at API 21; foreground-service requirements for modern target SDKs; Android 14+ permission, consent and token-use restrictions.",
+      "- Not a single universal requirement: exact manifest and runtime behavior depends on the app's target SDK and the device OS version.",
+      "- Uncertain without inspecting the app: whether a particular capture implementation is compliant; that depends on its manifest, service lifecycle, consent flow and callback handling.",
+      "",
+      "### Official Android developer sources",
+      "1. MediaProjectionManager | API reference — https://developer.android.com/reference/android/media/projection/MediaProjectionManager (API level 21 and documented setup flow).",
+      "2. Media projection | Android media — https://developer.android.com/media/grow/media-projection (consent, token reuse and Android 14+ foreground-service permissions).",
+      "3. Foreground service types | Background work — https://developer.android.com/develop/background-work/services/fgs/service-types (mediaProjection service type and runtime prerequisites).",
+      "",
+      "This answer is a deterministic source-based fallback because live model generation failed. The official URLs are provided directly; no claim is made that the app itself was inspected."
+    ].join("\n");
+  }
+  const lines = [
+    "## Independent research result",
+    "This is a deterministic evidence synthesis, not a model-generated answer. The generation request did not complete; the following claims are limited to retrieved source evidence.",
+    ""
+  ];
+  if (brief && brief.sourceCount && brief.evidence.length) {
+    lines.push("### What the retrieved material says");
+    const seen = new Set();
+    for (const item of brief.evidence) {
+      const key = item.text.toLowerCase().replace(/\W+/g, " ").slice(0, 180);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      lines.push("- " + item.text + " (Source: " + item.url + ")");
+      if (seen.size >= 10) break;
+    }
+    lines.push("", "### Evidence coverage", brief.quality + "; " + brief.sourceCount + " readable sources across " + brief.sourceHosts.length + " distinct domains.");
+    lines.push("These extracts are evidence, not a complete answer. Their relevance ranking does not prove accuracy, and conflicting or missing context may change the interpretation.");
+    lines.push("", "### What remains incomplete", "The requested reasoning, code generation, or implementation could not be completed because all configured generation routes failed. No code was generated, executed, committed, or built by this fallback.");
+  } else {
+    lines.push("No readable research sources were retrieved, so I cannot responsibly construct an evidence-based answer for this request.");
+    lines.push("The generation services failed and the independent research route returned no usable source text. Please retry when a generation route is available; do not treat this response as a completed answer.");
+  }
+  if (/cloudflare workers ai/i.test(String(prompt || ""))) {
+    lines.push(
+      "",
+      "### Current model comparison and recommendation (official catalogue)",
+      "| Model | Verified catalogue description | Best-fit use | Trade-off |",
+      "|---|---|---|---|",
+      "| @cf/meta/llama-3.3-70b-instruct-fp8-fast (configured) | Llama 3.3 70B quantized to FP8 and optimized for speed. | Fast general-purpose responses. | Keep as the speed-oriented baseline; do not assume it is the strongest specialist for difficult coding or reasoning. |",
+      "| @cf/deepseek-ai/deepseek-v4-pro-0813 | High-capability reasoning model with a 1-million-token context window and long-horizon agentic workflow focus. | Complex reasoning and large-context analysis. | Verify live pricing and latency before making it the default. |",
+      "| @cf/moonshotai/kimi-k2.7-code | Coding-oriented model with tool calling, vision input and structured outputs for agentic workloads. | Software development and tool-using coding workflows. | Test tool-call reliability and latency against real tasks. |",
+      "| @cf/zai-org/glm-5.2 | Catalogue describes it as a flagship agentic coding model. | Coding and multi-step software tasks. | Benchmark it before replacing the general baseline. |",
+      "",
+      "Recommendation: keep Llama 3.3 70B Fast as the low-latency general route; route difficult reasoning to DeepSeek V4 Pro and coding/tool workflows to Kimi K2.7 Code or GLM-5.2. This is a capability-based recommendation, not a measured ranking. Retrieved evidence does not establish comparative live latency or price, so measure those separately.",
+      "Official sources: https://developers.cloudflare.com/workers-ai/models/ and https://developers.cloudflare.com/changelog/product/workers-ai/"
+    );
+  }
+  lines.push("", "### Service status", "Generation request did not complete; this is a deterministic source-based fallback, not model-generated.", "Technical diagnostic: " + diagnostic, "Research was attempted independently; only retrieved source material is represented as evidence.");
+  return lines.join("\n");
+}
+
 function buildAppBuildingFallback(prompt, modelError) {
   const text = String(prompt || "");
   const lower = text.toLowerCase();
@@ -1232,76 +1302,6 @@ function buildAppBuildingFallback(prompt, modelError) {
     "### Provider diagnostic",
     "Normal generation route failed. Diagnostic: " + diagnostic
   ].join("\n");
-}
-
-function buildResearchOnlyFallback(prompt, brief, modelError) {
-  const diagnostic = String(modelError?.message || modelError || "Unknown generation failure").slice(0, 650);
-  if (/mediaprojection/.test(String(prompt || "").toLowerCase()) && /android/.test(String(prompt || "").toLowerCase())) {
-    return [
-      "## Android MediaProjection: official documentation findings",
-      "### Minimum Android version",
-      "The Android API reference states that MediaProjectionManager was added in API level 21 (Android 5.0). This is the documented API introduction level, not a guarantee that every newer capture feature works identically on every OS release.",
-      "",
-      "### Setup requirements documented by Android",
-      "1. Obtain explicit user approval for each new screen-capture session using MediaProjectionManager.createScreenCaptureIntent().",
-      "2. Use the result code and returned Intent to obtain the MediaProjection token.",
-      "3. Run capture through a foreground service. Apps targeting Android 10 (API 29) or later must maintain the projection session while that service is running and declare the mediaProjection foreground-service type.",
-      "4. For apps targeting Android 14 (API 34) or later, declare both FOREGROUND_SERVICE and FOREGROUND_SERVICE_MEDIA_PROJECTION permissions and set android:foregroundServiceType=\"mediaProjection\" on the service.",
-      "5. Android 14+ requires fresh user consent for each projection session and the MediaProjection token can be used only once to create a virtual display. Reusing the same consent result or calling createVirtualDisplay more than once on that projection can throw SecurityException.",
-      "6. Register MediaProjection.Callback and handle onStop() so resources and the virtual display are released when the user or system ends capture.",
-      "",
-      "### Documented facts versus uncertainty",
-      "- Documented: API introduction at API 21; foreground-service requirements for modern target SDKs; Android 14+ permission, consent and token-use restrictions.",
-      "- Not a single universal requirement: exact manifest and runtime behavior depends on the app's target SDK and the device OS version.",
-      "- Uncertain without inspecting the app: whether a particular capture implementation is compliant; that depends on its manifest, service lifecycle, consent flow and callback handling.",
-      "",
-      "### Official Android developer sources",
-      "1. MediaProjectionManager | API reference — https://developer.android.com/reference/android/media/projection/MediaProjectionManager (API level 21 and documented setup flow).",
-      "2. Media projection | Android media — https://developer.android.com/media/grow/media-projection (consent, token reuse and Android 14+ foreground-service permissions).",
-      "3. Foreground service types | Background work — https://developer.android.com/develop/background-work/services/fgs/service-types (mediaProjection service type and runtime prerequisites).",
-      "",
-      "This answer is a deterministic source-based fallback because live model generation failed. The official URLs are provided directly; no claim is made that the app itself was inspected."
-    ].join("\n");
-  }
-  const lines = [
-    "## Independent research result",
-    "This is a deterministic evidence synthesis, not a model-generated answer. The generation request did not complete; the following claims are limited to retrieved source evidence.",
-    ""
-  ];
-  if (brief && brief.sourceCount && brief.evidence.length) {
-    lines.push("### What the retrieved material says");
-    const seen = new Set();
-    for (const item of brief.evidence) {
-      const key = item.text.toLowerCase().replace(/\W+/g, " ").slice(0, 180);
-      if (seen.has(key)) continue;
-      seen.add(key);
-      lines.push("- " + item.text + " (Source: " + item.url + ")");
-      if (seen.size >= 10) break;
-    }
-    lines.push("", "### Evidence coverage", brief.quality + "; " + brief.sourceCount + " readable sources across " + brief.sourceHosts.length + " distinct domains.");
-    lines.push("These extracts are evidence, not a complete answer. Their relevance ranking does not prove accuracy, and conflicting or missing context may change the interpretation.");
-    lines.push("", "### What remains incomplete", "The requested reasoning, code generation, or implementation could not be completed because all configured generation routes failed. No code was generated, executed, committed, or built by this fallback.");
-  } else {
-    lines.push("No readable research sources were retrieved, so I cannot responsibly construct an evidence-based answer for this request.");
-    lines.push("The generation services failed and the independent research route returned no usable source text. Please retry when a generation route is available; do not treat this response as a completed answer.");
-  }
-  if (/cloudflare workers ai/i.test(String(prompt || ""))) {
-    lines.push(
-      "",
-      "### Current model comparison and recommendation (official catalogue)",
-      "| Model | Verified catalogue description | Best-fit use | Trade-off |",
-      "|---|---|---|---|",
-      "| @cf/meta/llama-3.3-70b-instruct-fp8-fast (configured) | Llama 3.3 70B quantized to FP8 and optimized for speed. | Fast general-purpose responses. | Keep as the speed-oriented baseline; do not assume it is the strongest specialist for difficult coding or reasoning. |",
-      "| @cf/deepseek-ai/deepseek-v4-pro-0813 | High-capability reasoning model with a 1-million-token context window and long-horizon agentic workflow focus. | Complex reasoning and large-context analysis. | Verify live pricing and latency before making it the default. |",
-      "| @cf/moonshotai/kimi-k2.7-code | Coding-oriented model with tool calling, vision input and structured outputs for agentic workloads. | Software development and tool-using coding workflows. | Test tool-call reliability and latency against real tasks. |",
-      "| @cf/zai-org/glm-5.2 | Catalogue describes it as a flagship agentic coding model. | Coding and multi-step software tasks. | Benchmark it before replacing the general baseline. |",
-      "",
-      "Recommendation: keep Llama 3.3 70B Fast as the low-latency general route; route difficult reasoning to DeepSeek V4 Pro and coding/tool workflows to Kimi K2.7 Code or GLM-5.2. This is a capability-based recommendation, not a measured ranking. Retrieved evidence does not establish comparative live latency or price, so measure those separately.",
-      "Official sources: https://developers.cloudflare.com/workers-ai/models/ and https://developers.cloudflare.com/changelog/product/workers-ai/"
-    );
-  }
-  lines.push("", "### Service status", "Generation request did not complete; this is a deterministic source-based fallback, not model-generated.", "Technical diagnostic: " + diagnostic, "Research was attempted independently; only retrieved source material is represented as evidence.");
-  return lines.join("\n");
 }
 
 function formatIndependentEvidenceBrief(brief) {
