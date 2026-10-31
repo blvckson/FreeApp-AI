@@ -343,8 +343,11 @@ export default {
 - Compare at least two genuinely independent sources when the evidence set permits. Prefer primary/official documentation for specifications and independent academic or reputable sources for evaluation.
 - Distinguish verified facts, source claims, reasoned inferences, recommendations, and unknowns. Include publication/update dates when supplied; flag stale evidence.
 - Explicitly identify disagreements, missing evidence, methodology limits, and possible bias. Never invent quotations, statistics, model IDs, study results, or citations.
-- For comparisons, use consistent criteria and a concise comparison table where useful; explain trade-offs rather than declaring an unsupported winner.
-- If fewer than two usable independent sources were retrieved, say that research coverage is insufficient and do not imply a comprehensive live review.
+- For any request that asks to compare, rank, choose between, or recommend among alternatives, the final answer MUST identify at least two concrete, distinct alternatives by name and compare them side by side using the same criteria. Do not answer a comparison request with only a catalogue link, a statement that evidence is incomplete, or generic advice to benchmark later.
+- Build the comparison from retrieved evidence: for each alternative, state only attributes actually supported by its cited source (such as capabilities, context window, supported inputs/tools, availability, documented limits, or published price). Cite each row or claim with the exact source URL that supports it. Never invent model IDs, specifications, prices, benchmark scores, or capabilities.
+- Include a clear trade-off and conditional recommendation. If a key attribute is unavailable, mark it 'not verified in retrieved sources' for that alternative rather than omitting the alternative. Separate measured results from vendor claims and your own inference.
+- For comparisons, use consistent criteria and a concise comparison table; explain trade-offs rather than declaring an unsupported winner.
+- If fewer than two usable independent sources were retrieved, state the limitation precisely, but still compare two named alternatives only to the extent the retrieved evidence supports; label unsupported fields as unknown and do not imply comprehensive verification.
 - End with a source register containing only URLs actually retrieved and used.`
           }] : []),
           ...(codeTask ? [{
@@ -386,8 +389,9 @@ For substantial application requests, deliver implementation, not generic advice
 
         const engineeringTask = !researchMode && isSoftwareEngineeringRequest(prompt);
         let engineeringPlan = null;
-        if (!researchMode && shouldUseEngineeringPlanner(prompt, buildMode)) {
-          try {
+        if (!researchMode) {
+          if (shouldUseEngineeringPlanner(prompt, buildMode)) {
+            try {
             const planResult = await runChatModel(env, [
               { role: "system", content: `You are FreeApp AI's software-engineering task planner. Produce a concise, actionable implementation plan as strict JSON only. Schema: {"goal":string,"requirements":[string],"assumptions":[string],"files_to_inspect":[string],"implementation_steps":[string],"verification_steps":[string],"risks":[string]}. Do not claim repository access, edits, commits, builds, or tests. Infer likely file paths only as candidates, label assumptions, and keep scope limited to the request. Use retrieved evidence only for external technical facts. If no usable research evidence is supplied, still produce a sound plan from the task and explicitly list external facts that require later verification. Do not invent repository files or claim tool access. Keep steps testable and ordered; include rollback or compatibility checks when relevant.` },
               { role: "user", content: "TASK:\\n" + prompt.slice(0, 9000) + "\\n\\nRECENT CONTEXT:\\n" + history.slice(-6).map(x => x.role + ": " + x.content).join("\\n").slice(0, 5000) + "\\n\\nRESEARCH EVIDENCE:\\n" + formatIndependentEvidenceBrief(evidenceBrief).slice(0, 7000) }
@@ -404,8 +408,9 @@ For substantial application requests, deliver implementation, not generic advice
                 risks: cleanPlanItems(parsedPlan.risks)
               };
             }
-          } catch {
-            // Planning is an enhancement; preserve the normal answer path if it fails.
+            } catch {
+              // Planning is an enhancement; preserve the normal answer path if it fails.
+            }
           }
         }
         if (engineeringPlan) {
@@ -997,6 +1002,12 @@ function engineeringDeliverableGaps(prompt, response, buildMode = false) {
   return [...new Set(gaps)];
 }
 
+
+function isSoftwareEngineeringRequest(prompt) {
+  const text = String(prompt || "").toLowerCase();
+  return /\b(build|create|develop|implement|code|program|debug|fix|refactor|commit|deploy|compile|apk|repository|github|workflow|pull request|software|app|application|api|backend|frontend|database|test suite)\b/i.test(text);
+}
+
 function isResearchFirstRequest(prompt) {
   const text = String(prompt || "").trim();
   if (!/\b(research|investigate|compare|evaluate|latest|current|evidence|sources|literature review|market analysis)\b/i.test(text)) return false;
@@ -1007,10 +1018,6 @@ function isResearchFirstRequest(prompt) {
     && !/\b(build|create|implement|write|generate)\s+(?:an?\s+)?(?:android|mobile|web|software)?\s*(?:app|application|program|script|software system)\b/i.test(text);
 }
 
-function isSoftwareEngineeringRequest(prompt) {
-  const text = String(prompt || "").toLowerCase();
-  return /\b(build|create|develop|implement|code|program|debug|fix|refactor|commit|deploy|compile|apk|repository|github|workflow|pull request|software|app|application|api|backend|frontend|database|test suite)\b/i.test(text);
-}
 
 function isFocusedCodeGenerationRequest(messages) {
   const userMessages = (messages || [])
