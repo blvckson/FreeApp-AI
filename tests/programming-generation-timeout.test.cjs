@@ -12,7 +12,8 @@ test("programming generation gets the extended timeout classifier only", () => {
   assert.equal(classify([{ role: "user", content: "Write a Python function and include unit tests." }]), true);
   assert.equal(classify([{ role: "user", content: "Implement the algorithm in JavaScript." }]), true);
   assert.equal(classify([{ role: "user", content: "Explain the causes of inflation." }]), false);
-  assert.equal(classify([{ role: "user", content: "Compare two historical events." }]), false);\n  assert.equal(classify([{ role: "user", content: "Build a full Android app." }]), false);
+  assert.equal(classify([{ role: "user", content: "Compare two historical events." }]), false);
+  assert.equal(classify([{ role: "user", content: "Build a full Android app." }]), false);
 
   assert.match(source, /providerTimeoutMs: isProgrammingGenerationRequest\(messages\) \? 22000 : 10000/);
   assert.match(source, /Number\(settings\.providerTimeoutMs \|\| provider\.timeoutMs\)/);
