@@ -15,8 +15,8 @@ test("programming requests prioritize configured Gemini before anonymous gateway
 });
 
 test("programming output allowance is larger without changing other request budgets", () => {
-  assert.match(source, /settings\.programming \? 7000 : 4096/);
-  assert.match(source, /providerTimeoutMs: isProgrammingGenerationRequest\(messages\) \? 22000 : 10000/);
+  assert.match(source, /settings\.programming \? 9000 : 6000/);
+  assert.match(source, /providerTimeoutMs: isProgrammingGenerationRequest\(messages\) \? 26000 : \(Number\(options\.max_tokens \|\| 0\) >= 5000 \? 18000 : 14000\)/);
   assert.match(source, /retryNetworkTimeouts: !isProgrammingGenerationRequest\(messages\)/);
 });
 
@@ -37,21 +37,21 @@ test("programming provider failure is explicit and sanitizes credential-like val
   assert.match(result, /No program was generated, compiled, or tested/);
 });
 
-test("programming-only routing classifier excludes debugging and app-building", () => {
+test("engineering routing classifier includes debugging and app-building but excludes explanations", () => {
   const focused = source.match(/function isFocusedCodeGenerationRequest\(messages\) \{[\s\S]*?\n\}/);
   const declaration = source.match(/function isProgrammingGenerationRequest\(messages\) \{[\s\S]*?\n\}/);
   assert.ok(declaration, "focused code-generation classifier must exist");
   assert.ok(focused && declaration, "programming classifiers must exist");
   const classify = new Function(focused[0] + "\n" + declaration[0] + "\nreturn isProgrammingGenerationRequest;")();
   assert.equal(classify([{role:"user",content:"Write a Python function first_non_repeating(s)."}]), true);
-  assert.equal(classify([{role:"user",content:"Debug this Python function."}]), false);
-  assert.equal(classify([{role:"user",content:"Fix this JavaScript bug."}]), false);
-  assert.equal(classify([{role:"user",content:"Build a full Android app."}]), false);
+  assert.equal(classify([{role:"user",content:"Debug this Python function."}]), true);
+  assert.equal(classify([{role:"user",content:"Fix this JavaScript bug."}]), true);
+  assert.equal(classify([{role:"user",content:"Build a full Android app."}]), true);
   assert.equal(classify([{role:"user",content:"Explain this code."}]), false);
 });
 
 
-test("app-building keeps the normal provider timeout and retry policy", () => {
+test("app-building receives the engineering provider timeout and retry policy", () => {
   const focused = source.match(/function isFocusedCodeGenerationRequest\(messages\) \{[\s\S]*?\n\}/);
   const declaration = source.match(/function isProgrammingGenerationRequest\(messages\) \{[\s\S]*?\n\}/);
   assert.ok(declaration, "focused programming classifier must exist");
@@ -59,9 +59,9 @@ test("app-building keeps the normal provider timeout and retry policy", () => {
   const classify = new Function(focused[0] + "\n" + declaration[0] + "\nreturn isProgrammingGenerationRequest;")();
   const appBuild = [{role:"user",content:"Build a full Android app with offline sync and database persistence."}];
   const programming = [{role:"user",content:"Write a Python function to sort a list."}];
-  assert.equal(classify(appBuild), false);
+  assert.equal(classify(appBuild), true);
   assert.equal(classify(programming), true);
-  assert.match(source, /providerTimeoutMs: isProgrammingGenerationRequest\(messages\) \? 22000 : 10000/);
+  assert.match(source, /providerTimeoutMs: isProgrammingGenerationRequest\(messages\) \? 26000 : \(Number\(options\.max_tokens \|\| 0\) >= 5000 \? 18000 : 14000\)/);
   assert.match(source, /retryNetworkTimeouts: !isProgrammingGenerationRequest\(messages\)/);
 
 });
