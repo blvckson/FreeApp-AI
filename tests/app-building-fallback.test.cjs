@@ -5,7 +5,7 @@ const vm = require("node:vm");
 
 const worker = fs.readFileSync(new URL("../worker.js", `file://${__filename}`), "utf8");
 const start = worker.indexOf("function buildAppBuildingFallback(prompt, modelError) {");
-const end = worker.indexOf("function formatIndependentEvidenceBrief(brief) {", start);
+const end = worker.length;
 assert.ok(start >= 0 && end > start, "app-building fallback must be isolated before research fallback");
 const buildAppBuildingFallback = vm.runInNewContext("(" + worker.slice(start, end).trim() + ")");
 
