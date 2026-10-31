@@ -5,9 +5,11 @@ const path = require("node:path");
 
 test("programming generation gets the extended timeout classifier only", () => {
   const source = fs.readFileSync(path.join(__dirname, "..", "worker.js"), "utf8");
+  const focused = source.match(/function isFocusedCodeGenerationRequest\(messages\) \{[\s\S]*?\n\}/);
   const declaration = source.match(/function isProgrammingGenerationRequest\(messages\) \{[\s\S]*?\n\}/);
   assert.ok(declaration, "programming request classifier must exist");
-  const classify = new Function("return (" + declaration[0] + ");")();
+  assert.ok(focused && declaration, "programming classifiers must exist");
+  const classify = new Function(focused[0] + "\n" + declaration[0] + "\nreturn isProgrammingGenerationRequest;")();
 
   assert.equal(classify([{ role: "user", content: "Write a Python function and include unit tests." }]), true);
   assert.equal(classify([{ role: "user", content: "Implement the algorithm in JavaScript." }]), true);
