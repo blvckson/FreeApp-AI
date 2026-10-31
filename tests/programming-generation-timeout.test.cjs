@@ -14,13 +14,13 @@ test("programming generation gets the extended timeout classifier only", () => {
   assert.equal(classify([{ role: "user", content: "Explain the causes of inflation." }]), false);
   assert.equal(classify([{ role: "user", content: "Compare two historical events." }]), false);\n  assert.equal(classify([{ role: "user", content: "Build a full Android app." }]), false);
 
-  assert.match(source, /providerTimeoutMs: isProgrammingGenerationRequest\\(messages\\) \\? 22000 : 10000/);
+  assert.match(source, /providerTimeoutMs: isProgrammingGenerationRequest\(messages\) \? 22000 : 10000/);
   assert.match(source, /Number\(settings\.providerTimeoutMs \|\| provider\.timeoutMs\)/);
 });
 
 test("programming requests do not repeat a full network timeout", () => {
   const source = fs.readFileSync(path.join(__dirname, "..", "worker.js"), "utf8");
-  assert.match(source, /retryNetworkTimeouts: !isProgrammingGenerationRequest\\(messages\\)/);
+  assert.match(source, /retryNetworkTimeouts: !isProgrammingGenerationRequest\(messages\)/);
   assert.match(source, /const timedOut = \/timeout\|timed out\|aborted\/i\.test/);
   assert.match(source, /!timedOut && settings\.retryNetworkTimeouts !== false/);
   assert.match(source, /status === 408 \|\| status === 425 \|\| status >= 500/);
