@@ -325,7 +325,7 @@ export default {
         const researchMode = isResearchFirstRequest(prompt);
         // Research requests that discuss software, models, APIs, or development
         // must not be mistaken for requests to implement software.
-        const codeTask = !researchMode && isSoftwareEngineeringRequest(prompt) && /\\b(code|program|debug|fix|refactor|implement|algorithm|api|backend|frontend|database|test|compile|build|app|application|software|repository|github)\\b/i.test(prompt);
+        const codeTask = !researchMode && isSoftwareEngineeringRequest(prompt) && /\b(code|program|debug|fix|refactor|implement|algorithm|api|backend|frontend|database|test|compile|build|app|application|software|repository|github)\b/i.test(prompt);
         const complexity = assessRequestComplexity(prompt, history, sources.length, images.length);
         const responseDepthGuidance = buildMode || codeTask
           ? "RESPONSE SIZE: Full deliverable. Include all requested implementation details, code, tests, validation, and run/build steps. Be readable and avoid repetition; do not omit required material to make the answer shorter."
@@ -999,12 +999,12 @@ function engineeringDeliverableGaps(prompt, response, buildMode = false) {
 
 function isResearchFirstRequest(prompt) {
   const text = String(prompt || "").trim();
-  if (!/\\b(research|investigate|compare|evaluate|latest|current|evidence|sources|literature review|market analysis)\\b/i.test(text)) return false;
+  if (!/\b(research|investigate|compare|evaluate|latest|current|evidence|sources|literature review|market analysis)\b/i.test(text)) return false;
   // Explicit implementation/debugging/build commands take precedence over
   // research wording; descriptive phrases such as "software development"
   // do not turn a research question into a coding task.
-  return !/\\b(write|generate|implement|debug|fix|refactor|compile|deploy|build|create)\\b[\\s\\S]{0,100}\\b(code|script|function|class|program|app|application|software|repository|workflow)\\b/i.test(text)
-    && !/\\b(build|create|implement|write|generate)\\s+(?:an?\\s+)?(?:android|mobile|web|software)?\\s*(?:app|application|program|script|software system)\\b/i.test(text);
+  return !/\b(write|generate|implement|debug|fix|refactor|compile|deploy|build|create)\b[\s\S]{0,100}\b(code|script|function|class|program|app|application|software|repository|workflow)\b/i.test(text)
+    && !/\b(build|create|implement|write|generate)\s+(?:an?\s+)?(?:android|mobile|web|software)?\s*(?:app|application|program|script|software system)\b/i.test(text);
 }
 
 function isSoftwareEngineeringRequest(prompt) {
