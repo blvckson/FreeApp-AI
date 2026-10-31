@@ -17,7 +17,7 @@ test("programming requests prioritize configured Gemini before anonymous gateway
 test("programming output allowance is larger without changing other request budgets", () => {
   assert.match(source, /settings\.programming \? 7000 : 4096/);
   assert.match(source, /providerTimeoutMs: programming \? 22000 : 10000/);
-  assert.match(source, /retryNetworkTimeouts: !programming/);
+  assert.match(source, /retryNetworkTimeouts: !isProgrammingGenerationRequest\\(messages\\)/);
 });
 
 test("configured Kilo and LLM7 credentials are attached only when present", () => {
@@ -38,7 +38,7 @@ test("programming provider failure is explicit and sanitizes credential-like val
 });
 
 test("programming-only routing classifier excludes debugging and app-building", () => {
-  const declaration = source.match(/function isFocusedCodeGenerationRequest\(messages\) \{[\s\S]*?\n\}/);
+  const declaration = source.match(/function isProgrammingGenerationRequest\(messages\) \{[\s\S]*?\n\}/);
   assert.ok(declaration, "focused code-generation classifier must exist");
   const classify = new Function("return (" + declaration[0] + ");")();
   assert.equal(classify([{role:"user",content:"Write a Python function first_non_repeating(s)."}]), true);
@@ -58,6 +58,6 @@ test("app-building keeps the normal provider timeout and retry policy", () => {
   assert.equal(classify(appBuild), false);
   assert.equal(classify(programming), true);
   assert.match(source, /providerTimeoutMs: programming \? 22000 : 10000/);
-  assert.match(source, /retryNetworkTimeouts: !programming/);
+  assert.match(source, /retryNetworkTimeouts: !isProgrammingGenerationRequest\\(messages\\)/);
   assert.doesNotMatch(source, /function isProgrammingGenerationRequest\(/);
 });
