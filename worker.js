@@ -322,8 +322,10 @@ export default {
         const evidence = imageContext + "\n\n" + formatIndependentEvidenceBrief(evidenceBrief);
 
         const buildMode = isComplexAppBuildRequest(prompt);
-        const codeTask = isSoftwareEngineeringRequest(prompt) && /\b(code|program|debug|fix|refactor|implement|algorithm|api|backend|frontend|database|test|compile|build|app|application|software|repository|github)\b/i.test(prompt);
-        const researchMode = /\b(research|investigate|compare|evaluate|latest|current|evidence|sources|literature review|market analysis)\b/i.test(prompt);
+        const researchMode = isResearchFirstRequest(prompt);
+        // Research requests that discuss software, models, APIs, or development
+        // must not be mistaken for requests to implement software.
+        const codeTask = !researchMode && isSoftwareEngineeringRequest(prompt) && /\b(code|program|debug|fix|refactor|implement|algorithm|api|backend|frontend|database|test|compile|build|app|application|software|repository|github)\b/i.test(prompt);
         const complexity = assessRequestComplexity(prompt, history, sources.length, images.length);
         const responseDepthGuidance = buildMode || codeTask
           ? "RESPONSE SIZE: Full deliverable. Include all requested implementation details, code, tests, validation, and run/build steps. Be readable and avoid repetition; do not omit required material to make the answer shorter."
@@ -382,9 +384,9 @@ For substantial application requests, deliver implementation, not generic advice
           }
         ];
 
-        const engineeringTask = isSoftwareEngineeringRequest(prompt);
+        const engineeringTask = !researchMode && isSoftwareEngineeringRequest(prompt);
         let engineeringPlan = null;
-        if (shouldUseEngineeringPlanner(prompt, buildMode)) {
+        if (!researchMode && shouldUseEngineeringPlanner(prompt, buildMode)) {
           try {
             const planResult = await runChatModel(env, [
               { role: "system", content: `You are FreeApp AI's software-engineering task planner. Produce a concise, actionable implementation plan as strict JSON only. Schema: {"goal":string,"requirements":[string],"assumptions":[string],"files_to_inspect":[string],"implementation_steps":[string],"verification_steps":[string],"risks":[string]}. Do not claim repository access, edits, commits, builds, or tests. Infer likely file paths only as candidates, label assumptions, and keep scope limited to the request. Use retrieved evidence only for external technical facts. If no usable research evidence is supplied, still produce a sound plan from the task and explicitly list external facts that require later verification. Do not invent repository files or claim tool access. Keep steps testable and ordered; include rollback or compatibility checks when relevant.` },
@@ -993,6 +995,16 @@ function engineeringDeliverableGaps(prompt, response, buildMode = false) {
     if (!/\b(build|gradle|install|run|npm|command)\b/i.test(answer)) gaps.push("exact build and run instructions");
   }
   return [...new Set(gaps)];
+}
+
+function isResearchFirstRequest(prompt) {
+  const text = String(prompt || "").trim();
+  if (!/\b(research|investigate|compare|evaluate|latest|current|evidence|sources|literature review|market analysis)\b/i.test(text)) return false;
+  // Explicit implementation/debugging/build commands take precedence over
+  // research wording; descriptive phrases such as "software development"
+  // do not turn a research question into a coding task.
+  return !/\b(write|generate|implement|debug|fix|refactor|compile|deploy|build|create)\b[\s\S]{0,100}\b(code|script|function|class|program|app|application|software|repository|workflow)\b/i.test(text)
+    && !/\b(build|create|implement|write|generate)\s+(?:an?\s+)?(?:android|mobile|web|software)?\s*(?:app|application|program|script|software system)\b/i.test(text);
 }
 
 function isSoftwareEngineeringRequest(prompt) {
