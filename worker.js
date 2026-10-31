@@ -389,7 +389,7 @@ For substantial application requests, deliver implementation, not generic advice
 
         const engineeringTask = !researchMode && isSoftwareEngineeringRequest(prompt);
         let engineeringPlan = null;
-        if (!researchMode && shouldUseEngineeringPlanner(prompt, buildMode)) {
+        if (shouldUseEngineeringPlanner(prompt, buildMode)) {
           try {
             const planResult = await runChatModel(env, [
               { role: "system", content: `You are FreeApp AI's software-engineering task planner. Produce a concise, actionable implementation plan as strict JSON only. Schema: {"goal":string,"requirements":[string],"assumptions":[string],"files_to_inspect":[string],"implementation_steps":[string],"verification_steps":[string],"risks":[string]}. Do not claim repository access, edits, commits, builds, or tests. Infer likely file paths only as candidates, label assumptions, and keep scope limited to the request. Use retrieved evidence only for external technical facts. If no usable research evidence is supplied, still produce a sound plan from the task and explicitly list external facts that require later verification. Do not invent repository files or claim tool access. Keep steps testable and ordered; include rollback or compatibility checks when relevant.` },
@@ -1028,6 +1028,7 @@ function isFocusedCodeGenerationRequest(messages) {
 }
 
 function shouldUseEngineeringPlanner(prompt, buildMode = false) {
+  if (isResearchFirstRequest(prompt)) return false;
   if (buildMode) return true;
   const text = String(prompt || "").toLowerCase();
   // Preserve the existing planner for debugging, repair and integration work.
