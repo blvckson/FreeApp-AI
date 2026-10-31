@@ -1276,8 +1276,15 @@ function assessRequestComplexity(prompt, history, sourceCount, imageCount) {
   return { complex, level: complex ? "deep-review" : "standard" };
 }
 
+function isProgrammingGenerationRequest(messages) {
+  // Only focused source-code generation receives the programming-specific
+  // provider budget. App-building, debugging, repair and repository tasks
+  // retain their existing non-programming provider policy.
+  return isFocusedCodeGenerationRequest(messages);
+}
+
 async function runChatModel(env, messages, options = {}) {
-  const programming = isFocusedCodeGenerationRequest(messages);
+  const programming = isProgrammingGenerationRequest(messages);
   const settings = {
     messages,
     max_tokens: options.max_tokens || 4096,
@@ -1285,10 +1292,10 @@ async function runChatModel(env, messages, options = {}) {
     // Code tasks receive a longer generation window; all other categories
     // keep the existing timeout budget and provider ordering.
     programming,
-    providerTimeoutMs: programming ? 22000 : 10000,
+    providerTimeoutMs: isProgrammingGenerationRequest(messages) ? 22000 : 10000,
     // A full timeout is evidence that the route is not responding; do not
     // immediately spend the same long budget repeating that same request.
-    retryNetworkTimeouts: !programming
+    retryNetworkTimeouts: !isProgrammingGenerationRequest(messages)
   };
 
   const providerErrors = [];
