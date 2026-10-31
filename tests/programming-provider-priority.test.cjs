@@ -17,7 +17,7 @@ test("programming requests prioritize configured Gemini before anonymous gateway
 test("programming output allowance is larger without changing other request budgets", () => {
   assert.match(source, /settings\.programming \? 7000 : 4096/);
   assert.match(source, /providerTimeoutMs: settings\.programming \? 22000 : 10000/);
-  assert.match(source, /retryNetworkTimeouts: !settings\.programming/);
+  assert.match(source, /retryNetworkTimeouts: !programming/);
 });
 
 test("configured Kilo and LLM7 credentials are attached only when present", () => {
