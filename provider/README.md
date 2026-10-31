@@ -1,41 +1,45 @@
-# FreeApp AI — self-hosted internal model provider
+# FreeApp AI — independent, model-agnostic inference provider
 
-This is the first-party inference runtime for FreeApp AI. It runs an open-weight GGUF language model under your control using llama.cpp's server. It does **not** call Kilo, LLM7, Gemini, Pollinations, or Cloudflare Workers AI to generate text. Those existing integrations remain optional fallbacks in the Worker unless internal-only mode is enabled.
+FreeApp AI owns the provider interface, request routing, authentication boundary, response normalization, and provider configuration. The inference engine is a replaceable implementation behind that interface. **No named model or model vendor is mandatory.**
 
-## What this delivers
+## Architecture
 
-- A real model process serving chat completions at `/v1/chat/completions`.
-- A compact default Qwen 2.5 3B Instruct Q4_K_M model, downloaded as a separate artifact (not committed to Git).
-- Bearer-token protection between the Worker and model server.
-- Configurable internal-first or strict internal-only inference.
+`FreeApp AI application → FreeApp AI Worker → internal provider contract → replaceable inference engine`
 
-## Host requirements
+The internal provider speaks an OpenAI-compatible chat-completions contract at `/v1/chat/completions`. An engine can be replaced without changing FreeApp AI's application logic as long as it implements that contract directly or is wrapped by a thin adapter. The reference llama.cpp Compose service is optional—not the definition of the provider.
 
-Run this on a machine you control that can stay online and is reachable from the deployed Worker over HTTPS. A small 3B quantized model can run on CPU, but generation may be slow; more RAM and a supported GPU improve throughput. Allow several GB of free disk space for the model and additional memory for inference. This repository and GitHub Actions do not provide the compute host automatically.
+External model services (Kilo, LLM7, Gemini, Pollinations, and managed Workers AI) are not the independent provider. Existing compatibility integrations remain separate and can be disabled with strict internal-only mode.
 
-## Start the model
+## Engine contract
 
-1. Install Docker Engine and the Docker Compose plugin on your inference host.
-2. Copy `.env.example` to `.env` and replace the example value with a long random secret. Never commit `.env`.
-3. Run `sh download-model.sh` from this directory. Set `MODEL_URL` to a compatible GGUF download URL to use another open-weight model.
-4. Run `docker compose --env-file .env up -d`.
-5. Put the service behind a trusted HTTPS reverse proxy or private network tunnel. Do not expose port 8080 directly to the public internet. Keep the API key secret.
-6. Verify locally with `curl -H "Authorization: Bearer YOUR_SECRET" http://127.0.0.1:8080/v1/models`.
+See [ENGINE-CONTRACT.md](ENGINE-CONTRACT.md) for request/response requirements, adapter responsibilities, health checks, and conformance tests.
 
-The compose file binds the model port to loopback by default. Configure your reverse proxy to forward authenticated HTTPS traffic to this local port.
+## Optional reference runtime
+
+The included `docker-compose.yml` is one replaceable adapter example using llama.cpp. It requires a model artifact selected by the operator; it does not download, select, or require a particular vendor's model.
+
+1. Install Docker Engine and Docker Compose on a machine you control.
+2. Copy `.env.example` to `.env` and set a long random API key.
+3. Put a compatible model artifact in `provider/models/`, or download one using the generic script:
+   `MODEL_URL='<artifact URL>' MODEL_FILENAME='model.gguf' sh download-model.sh`.
+4. Set `MODEL_FILE=model.gguf` in `.env` (plus optional `MODEL_ALIAS` and `MODEL_CONTEXT_SIZE`).
+5. Run `docker compose --env-file .env up -d`.
+6. Put the service behind authenticated HTTPS or a private network tunnel. Do not expose port 8080 directly to the public internet.
+
+A different inference engine can replace this Compose service if it satisfies the engine contract. The Worker only needs the protected HTTPS base URL and optional model alias; it does not need to know the engine brand.
 
 ## Connect the FreeApp AI Worker
 
-Set these Worker environment variables/secrets:
+Configure:
 
-- `FREEAPP_INTERNAL_PROVIDER_URL`: base HTTPS URL of the protected model server (no trailing slash).
-- `FREEAPP_INTERNAL_API_KEY`: same secret as `LLAMA_API_KEY` (store as a secret, not plaintext config).
-- `FREEAPP_INTERNAL_MODEL`: optional model label; default `freeapp-local`.
+- `FREEAPP_INTERNAL_PROVIDER_URL`: protected HTTPS base URL of the internal provider adapter.
+- `FREEAPP_INTERNAL_API_KEY`: same secret configured on the provider.
+- `FREEAPP_INTERNAL_MODEL`: optional model/engine alias understood by the adapter; default is `freeapp-engine`.
 - `FREEAPP_INTERNAL_TIMEOUT_MS`: optional; default 90000, maximum 180000.
-- `FREEAPP_INTERNAL_ONLY`: set to `true` to make the internal model the sole text-generation provider. When enabled, a missing or failing internal provider returns a clear error rather than silently routing generation to an external provider.
+- `FREEAPP_INTERNAL_ONLY=true`: make this provider the sole text-generation route. If it is unavailable, FreeApp AI returns an explicit provider error rather than silently switching to an external service.
 
-With the URL configured, the internal model is attempted first. If it is unavailable and internal-only mode is false, the existing external compatibility chain can still serve requests.
+The internal endpoint is attempted first. Without strict mode, existing external compatibility routing may still be used when the internal endpoint is not configured or fails. Strict mode is the setting that enforces independence.
 
-## Important boundaries
+## Hosting reality
 
-This creates the internal model-serving software and integration, not a free hosted GPU. A reachable always-on host and a model file are required before live inference can succeed. The first model is a compact general-purpose starting point; it must be benchmarked on FreeApp AI's reasoning, programming, app-building, research synthesis, image and long-context tasks before claiming parity with larger hosted models. Image understanding remains on the existing image-analysis path until a compatible vision model is separately configured.
+This repository supplies provider software and the integration, not compute or free hosting. Live inference requires an always-on reachable host with enough RAM/CPU/GPU and disk for the chosen engine and model. Free hosting services may sleep, limit compute, or disconnect; GitHub Actions is not an always-on inference server. Do not enable strict mode until the internal endpoint is live and passes the project's reasoning, programming, app-building, research-synthesis, and reliability benchmarks.
