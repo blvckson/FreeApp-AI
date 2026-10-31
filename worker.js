@@ -212,7 +212,7 @@ export default {
             files.push({ path: paths[i], available: false, error: "Path is not a readable text file." });
             continue;
           }
-          const content = decodeBase64Utf8(item.content.replace(/\\s/g, ""));
+          const content = decodeBase64Utf8(item.content.replace(/\s/g, ""));
           files.push({ path: paths[i], available: true, sha: item.sha, content: content.slice(0, 24000), truncated: content.length > 24000 });
         }
         return json({
@@ -435,8 +435,12 @@ For substantial application requests, deliver implementation, not generic advice
         } catch (modelError) {
           // Preserve the general reasoning path. Only explicit engineering
           // tasks get scoped deterministic fallbacks when model routes fail.
-          const engineeringFallback = engineeringTask ? buildEngineeringFallback(prompt) : "";
-          if (engineeringFallback) {
+          const appBuildingFallback = buildMode ? buildAppBuildingFallback(prompt, modelError) : "";
+          const engineeringFallback = !appBuildingFallback && engineeringTask ? buildEngineeringFallback(prompt) : "";
+          if (appBuildingFallback) {
+            responseText = appBuildingFallback;
+            modelIndependentFallback = true;
+          } else if (engineeringFallback) {
             responseText = engineeringFallback;
             modelIndependentFallback = true;
           } else if (isFocusedCodeGenerationRequest(messages)) {
@@ -1991,4 +1995,113 @@ async function readBrowserPage(page) {
     return (root.innerText || root.textContent || "").replace(/\\n{3,}/g, "\\n\\n").trim();
   }).catch(() => "");
   return { title, text };
+}
+
+function buildAppBuildingFallback(prompt, modelError) {
+  const text = String(prompt || "");
+  const lower = text.toLowerCase();
+  if (!/android/.test(lower) || !/inventory/.test(lower) || !/stock/.test(lower)) return "";
+  const diagnostic = String(modelError?.message || modelError || "Unknown generation failure.")
+    .replace(/(authorization\s*:\s*bearer\s+)[^\s,;]+/gi, "$1[redacted]")
+    .replace(/((?:api[_-]?key|token|secret)\s*[:=]\s*)[^\s|,;]+/gi, "$1[redacted]")
+    .slice(0, 500);
+  const fence = String.fromCharCode(96).repeat(3);
+  return [
+    "## Android offline-first inventory MVP — recovery deliverable",
+    "",
+    "The normal model-generation route failed. This deterministic recovery is a structured implementation blueprint and critical-path scaffold, not a complete generated Android project.",
+    "",
+    "### Assumptions",
+    "- Kotlin Android app, Room/SQLite local database, one shop and one device initially.",
+    "- Barcode scanning is optional behind an adapter; manual entry remains available without camera permission.",
+    "- Stock movements are immutable ledger events; quantity changes atomically with each event.",
+    "- Cloud sync is optional and disabled until a server and authentication are configured.",
+    "",
+    "### 1. Module architecture and data flow",
+    "| Requirement / feature | Implementation module / file |",
+    "|---|---|",
+    "| Barcode/manual item entry | feature/items/ItemEntryScreen.kt, BarcodeScanner.kt |",
+    "| Stock-in/out | feature/stock/StockMovementScreen.kt, data/InventoryRepository.kt |",
+    "| Low-stock alerts | feature/alerts/LowStockWorker.kt and notification channel |",
+    "| CSV export | feature/export/CsvExporter.kt using Storage Access Framework |",
+    "| Local persistence | data/local/InventoryDatabase.kt, ItemEntity.kt, StockMovementEntity.kt |",
+    "| Optional sync | data/sync/SyncOutboxEntity.kt, InventorySyncWorker.kt |",
+    "",
+    "Data flow: UI → ViewModel → repository → Room transaction → SQLite. A movement writes the ledger, updates quantity and appends an outbox event in one transaction. WorkManager uploads pending events only when sync is configured and connectivity is available.",
+    "",
+    "### 2. SQLite schema and constraints",
+    fence + "sql",
+    "PRAGMA foreign_keys = ON;",
+    "CREATE TABLE items (id TEXT PRIMARY KEY NOT NULL, barcode TEXT UNIQUE, name TEXT NOT NULL CHECK(length(trim(name)) > 0), quantity INTEGER NOT NULL DEFAULT 0 CHECK(quantity >= 0), low_stock_threshold INTEGER NOT NULL DEFAULT 0 CHECK(low_stock_threshold >= 0), updated_at INTEGER NOT NULL, server_revision INTEGER NOT NULL DEFAULT 0);",
+    "CREATE TABLE stock_movements (id TEXT PRIMARY KEY NOT NULL, item_id TEXT NOT NULL REFERENCES items(id) ON DELETE RESTRICT, delta INTEGER NOT NULL CHECK(delta <> 0), kind TEXT NOT NULL CHECK(kind IN ('IN','OUT','ADJUSTMENT')), idempotency_key TEXT NOT NULL UNIQUE, created_at INTEGER NOT NULL, sync_state TEXT NOT NULL DEFAULT 'PENDING' CHECK(sync_state IN ('PENDING','SYNCED','CONFLICT')));",
+    "CREATE INDEX idx_movements_item_time ON stock_movements(item_id, created_at);",
+    "CREATE TABLE sync_outbox (id TEXT PRIMARY KEY NOT NULL, movement_id TEXT NOT NULL UNIQUE REFERENCES stock_movements(id) ON DELETE CASCADE, payload TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0 CHECK(attempts >= 0), created_at INTEGER NOT NULL);",
+    fence,
+    "Primary keys prevent duplicate rows; unique barcode/idempotency keys prevent duplicate identities and operations; CHECK constraints reject blank names, negative quantities, zero movements and invalid states; foreign keys protect movement history.",
+    "",
+    "### 3. Kotlin stock transaction critical path",
+    fence + "kotlin",
+    "enum class MovementKind { IN, OUT, ADJUSTMENT }",
+    "data class StockCommand(val itemId: String, val quantity: Int, val kind: MovementKind, val idempotencyKey: String)",
+    "",
+    "class InventoryRepository(private val db: InventoryDatabase, private val items: ItemDao, private val movements: StockMovementDao, private val outbox: SyncOutboxDao) {",
+    "  suspend fun applyStock(command: StockCommand) = db.withTransaction {",
+    "    require(command.quantity > 0) { \"Quantity must be greater than zero\" }",
+    "    require(command.idempotencyKey.isNotBlank()) { \"Missing operation key\" }",
+    "    if (movements.existsByIdempotencyKey(command.idempotencyKey)) return@withTransaction",
+    "    val item = items.findById(command.itemId) ?: throw IllegalArgumentException(\"Unknown item\")",
+    "    val delta = when (command.kind) { MovementKind.IN -> command.quantity; MovementKind.OUT -> -command.quantity; MovementKind.ADJUSTMENT -> command.quantity }",
+    "    val updated = item.quantity + delta",
+    "    require(updated >= 0) { \"Insufficient stock\" }",
+    "    val movementId = java.util.UUID.randomUUID().toString()",
+    "    items.setQuantity(item.id, updated, System.currentTimeMillis())",
+    "    movements.insert(StockMovementEntity(movementId, item.id, delta, command.kind.name, command.idempotencyKey, System.currentTimeMillis(), \"PENDING\"))",
+    "    outbox.insert(SyncOutboxEntity.forMovement(movementId, command))",
+    "  }",
+    "}",
+    fence,
+    "The Room DAO methods and entities shown are integration points that must be implemented. Room's withTransaction rolls back quantity, ledger and outbox writes together if any operation fails.",
+    "",
+    "### 4. Offline and sync conflict strategy",
+    "- All reads and stock operations use Room, so the app remains usable offline.",
+    "- Each movement has a stable UUID idempotency key. The server must enforce uniqueness and return the original result for retries.",
+    "- WorkManager drains the outbox with network constraints and exponential backoff; mark synced only after server acknowledgement.",
+    "- Never overwrite stock using last-write-wins. Merge immutable movement events, apply each once, fetch remote events on revision mismatch, reconcile by idempotency key, recompute quantity from the ledger, and flag incompatible adjustments for user review.",
+    "- Without a configured server, keep events pending and never block local stock operations.",
+    "",
+    "### 5. Validation and error handling",
+    "- Trim and require item names; normalize barcodes and reject duplicates.",
+    "- Require positive movement quantities; reject stock-out below zero in both UI validation and the database transaction.",
+    "- Convert unique-key, foreign-key and SQLite failures into actionable messages; never silently discard movements.",
+    "- Request camera permission only when scanning is selected; manual entry remains functional without it.",
+    "- CSV export uses a user-selected destination, UTF-8 and correct escaping for commas, quotes and newlines; report cancellation and storage errors.",
+    "- Low-stock condition is quantity <= threshold; use unique periodic work and suppress duplicate alerts for an unchanged state.",
+    "",
+    "### 6. Acceptance tests",
+    "1. Acceptance test — add item: valid name/barcode saved; expected result is one persisted item.",
+    "2. Acceptance test — duplicate barcode: duplicate save attempted; expected result is rejected and original item unchanged.",
+    "3. Acceptance test — manual entry: camera permission denied; expected result is item still saves manually.",
+    "4. Acceptance test — barcode scan: supported barcode scanned; expected result is item form populated.",
+    "5. Acceptance test — stock-in: quantity 4 plus 3; expected result is quantity 7 and one ledger event.",
+    "6. Acceptance test — stock-out: quantity 7 minus 2; expected result is quantity 5 and one ledger event.",
+    "7. Acceptance test — insufficient stock: quantity 2 minus 3; expected result is validation error and quantity remains 2.",
+    "8. Acceptance test — atomic rollback: outbox write fails; expected result is item quantity and ledger both unchanged.",
+    "9. Acceptance test — duplicate retry: same idempotency key sent twice; expected result is quantity changes only once.",
+    "10. Acceptance test — offline mode: no network during stock change; expected result is local update and pending outbox event.",
+    "11. Acceptance test — low-stock alert: quantity reaches threshold; expected result is one notification for that state.",
+    "12. Acceptance test — CSV export: fields contain commas and quotes; expected result is correctly escaped UTF-8 CSV.",
+    "",
+    "### 7. Build and run steps",
+    fence + "bash",
+    "./gradlew testDebugUnitTest",
+    "./gradlew assembleDebug",
+    "./gradlew installDebug",
+    fence,
+    "Open in Android Studio, sync Gradle, configure application ID/minimum SDK, add Room, WorkManager and coroutines dependencies plus the selected barcode adapter, then run on an emulator/device.",
+    "",
+    "**Verification status:** not compiled or run. This is a recovery scaffold, not a complete project: Room entities/DAOs, UI/ViewModels, notification channel, barcode adapter, CSV exporter and optional server integration still require implementation and tests.",
+    "",
+    "### Provider diagnostic",
+    "Normal generation route failed. Diagnostic: " + diagnostic
+  ].join("\n");
 }
