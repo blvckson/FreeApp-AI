@@ -343,8 +343,11 @@ export default {
 - Compare at least two genuinely independent sources when the evidence set permits. Prefer primary/official documentation for specifications and independent academic or reputable sources for evaluation.
 - Distinguish verified facts, source claims, reasoned inferences, recommendations, and unknowns. Include publication/update dates when supplied; flag stale evidence.
 - Explicitly identify disagreements, missing evidence, methodology limits, and possible bias. Never invent quotations, statistics, model IDs, study results, or citations.
-- For comparisons, use consistent criteria and a concise comparison table where useful; explain trade-offs rather than declaring an unsupported winner.
-- If fewer than two usable independent sources were retrieved, say that research coverage is insufficient and do not imply a comprehensive live review.
+- For any request that asks to compare, rank, choose between, or recommend among alternatives, the final answer MUST identify at least two concrete, distinct alternatives by name and compare them side by side using the same criteria. Do not answer a comparison request with only a catalogue link, a statement that evidence is incomplete, or generic advice to benchmark later.
+- Build the comparison from retrieved evidence: for each alternative, state only attributes actually supported by its cited source (such as capabilities, context window, supported inputs/tools, availability, documented limits, or published price). Cite each row or claim with the exact source URL that supports it. Never invent model IDs, specifications, prices, benchmark scores, or capabilities.
+- Include a clear trade-off and conditional recommendation. If a key attribute is unavailable, mark it 'not verified in retrieved sources' for that alternative rather than omitting the alternative. Separate measured results from vendor claims and your own inference.
+- For comparisons, use consistent criteria and a concise comparison table; explain trade-offs rather than declaring an unsupported winner.
+- If fewer than two usable independent sources were retrieved, state the limitation precisely, but still compare two named alternatives only to the extent the retrieved evidence supports; label unsupported fields as unknown and do not imply comprehensive verification.
 - End with a source register containing only URLs actually retrieved and used.`
           }] : []),
           ...(codeTask ? [{
