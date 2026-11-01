@@ -246,6 +246,18 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public String getLocalServerStatus() {
+            try {
+                org.json.JSONObject status = new org.json.JSONObject();
+                status.put("running", PhoneHostedServerService.isRunning());
+                status.put("memory", new ai.freeapp.app.server.AdaptiveMemoryManager(MainActivity.this).snapshot());
+                return status.toString();
+            } catch (Exception e) {
+                return "{\\"error\\":\\"status_unavailable\\"}";
+            }
+        }
+
+        @JavascriptInterface
         public void stopLocalServer() {
             runOnUiThread(() -> {
                 Intent intent = new Intent(MainActivity.this, PhoneHostedServerService.class);
