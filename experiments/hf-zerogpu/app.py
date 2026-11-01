@@ -7,7 +7,10 @@ import gradio as gr
 import spaces
 import torch
 from fastapi import FastAPI, Header, HTTPException, Request
+from starlette.concurrency import run_in_threadpool
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
+from protocol import validate_chat_request
 
 MODEL_ID = os.getenv("FREEAPP_MODEL_ID", "Qwen/Qwen2.5-7B-Instruct")
 MODEL_ALIAS = "freeapp-ai-qwen7b-experiment"
@@ -27,16 +30,7 @@ model.eval()
 
 
 def _messages_to_prompt(messages: Any) -> str:
-    if not isinstance(messages, list) or not messages:
-        raise ValueError("messages must be a non-empty array")
-    normalized = []
-    for item in messages:
-        if not isinstance(item, dict) or item.get("role") not in {"system", "user", "assistant"}:
-            raise ValueError("each message must have a supported role and text content")
-        content = item.get("content")
-        if not isinstance(content, str):
-            raise ValueError("only text message content is supported in this experiment")
-        normalized.append({"role": item["role"], "content": content})
+    normalized = [{"role": m["role"], "content": m["content"]} for m in messages]
     return tokenizer.apply_chat_template(
         normalized, tokenize=False, add_generation_prompt=True
     )
@@ -45,10 +39,10 @@ def _messages_to_prompt(messages: Any) -> str:
 @spaces.GPU(duration=120)
 def generate_completion(messages: Any, max_tokens: int, temperature: float) -> str:
     prompt = _messages_to_prompt(messages)
-    inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+    inputs = tokenizer(
+        prompt, return_tensors="pt", truncation=True, max_length=8192
+    ).to(model.device)
     input_length = inputs["input_ids"].shape[1]
-    max_tokens = max(1, min(int(max_tokens), 2048))
-    temperature = max(0.0, min(float(temperature), 1.5))
     generation_args = {
         "max_new_tokens": max_tokens,
         "do_sample": temperature > 0,
@@ -89,17 +83,16 @@ async def list_models(authorization: str | None = Header(default=None)):
 @api.post("/v1/chat/completions")
 async def chat_completions(request: Request, authorization: str | None = Header(default=None)):
     _authorize(authorization)
-    body = await request.json()
-    requested_model = body.get("model", MODEL_ALIAS)
-    if requested_model not in {MODEL_ALIAS, MODEL_ID}:
-        raise HTTPException(status_code=400, detail="Unknown experiment model")
     try:
-        messages = body.get("messages")
-        max_tokens = int(body.get("max_tokens", 512))
-        temperature = float(body.get("temperature", 0.2))
-        answer = generate_completion(messages, max_tokens, temperature)
+        body = await request.json()
+        messages, max_tokens, temperature = validate_chat_request(body)
+        answer = await run_in_threadpool(
+            generate_completion, messages, max_tokens, temperature
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Inference failed: {type(exc).__name__}") from exc
     if not answer:
