@@ -253,7 +253,7 @@ public class MainActivity extends Activity {
                 status.put("memory", new ai.freeapp.app.server.AdaptiveMemoryManager(MainActivity.this).snapshot());
                 return status.toString();
             } catch (Exception e) {
-                return "{\\"error\\":\\"status_unavailable\\"}";
+                return "{\"error\":\"status_unavailable\"}";
             }
         }
 
