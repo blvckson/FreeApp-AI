@@ -1,6 +1,12 @@
 name: Isolated Hugging Face ZeroGPU Experiment Validation
 
 on:
+  push:
+    branches:
+      - "experiment/hf-zerogpu-qwen7b-isolated"
+    paths:
+      - "experiments/hf-zerogpu/**"
+      - ".github/workflows/hf-zerogpu-experiment-validation.yml"
   pull_request:
     paths:
       - "experiments/hf-zerogpu/**"
