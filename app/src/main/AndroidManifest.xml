@@ -6,6 +6,8 @@
         </intent>
     </queries>
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <application android:theme="@style/AppTheme" android:label="FreeApp AI" android:usesCleartextTraffic="false">
         <service
@@ -19,6 +21,15 @@
             <meta-data
                 android:name="android.accessibilityservice"
                 android:resource="@xml/phone_control_accessibility" />
+        </service>
+        <service
+            android:name=".server.PhoneHostedServerService"
+            android:exported="false"
+            android:stopWithTask="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="User-started local AI API server and resource monitoring" />
         </service>
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
