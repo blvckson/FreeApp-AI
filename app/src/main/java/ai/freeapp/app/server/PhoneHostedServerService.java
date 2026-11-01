@@ -32,6 +32,9 @@ public class PhoneHostedServerService extends Service {
     public static final int PORT = 8765;
     private static final String CHANNEL = "freeapp_server";
     private volatile boolean running = false;
+    private static volatile boolean serverRunning = false;
+
+    public static boolean isRunning() { return serverRunning; }
     private ServerSocket serverSocket;
     private ExecutorService clients;
     private Thread acceptThread;
@@ -58,10 +61,12 @@ public class PhoneHostedServerService extends Service {
 
     private synchronized void startHost() {
         if (running) return;
+        if (clients == null || clients.isShutdown()) clients = Executors.newFixedThreadPool(2);
         running = true;
         acceptThread = new Thread(() -> {
             try {
                 serverSocket = new ServerSocket(PORT, 8, java.net.InetAddress.getByName("127.0.0.1"));
+                serverRunning = true;
                 while (running) {
                     final Socket client = serverSocket.accept();
                     clients.execute(() -> handle(client));
@@ -111,6 +116,7 @@ public class PhoneHostedServerService extends Service {
 
     private synchronized void stopHost() {
         running = false;
+        serverRunning = false;
         try { if (serverSocket != null) serverSocket.close(); } catch (Exception ignored) { }
         serverSocket = null;
         if (clients != null) clients.shutdownNow();
