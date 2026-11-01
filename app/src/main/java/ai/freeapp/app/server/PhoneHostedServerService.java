@@ -10,7 +10,6 @@ import android.os.Build;
 import android.os.IBinder;
 
 import ai.freeapp.app.MainActivity;
-import ai.freeapp.app.R;
 
 import org.json.JSONObject;
 
@@ -136,7 +135,7 @@ public class PhoneHostedServerService extends Service {
                 ? new Notification.Builder(this, CHANNEL) : new Notification.Builder(this);
         return builder.setContentTitle("FreeApp AI Server")
                 .setContentText("Local server active on this phone")
-                .setSmallIcon(R.drawable.ic_launcher)
+                .setSmallIcon(android.R.drawable.stat_notify_sync)
                 .setContentIntent(pending)
                 .setOngoing(true)
                 .build();
