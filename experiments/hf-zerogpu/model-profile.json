@@ -1,0 +1,15 @@
+{
+  "experiment": "isolated-larger-model-candidate",
+  "model_id": "Qwen/Qwen2.5-7B-Instruct",
+  "upstream_license": "Apache-2.0",
+  "runtime": "Hugging Face ZeroGPU + Gradio + Transformers",
+  "precision": "bfloat16",
+  "estimated_weight_memory_gb": 15.2,
+  "target_gpu": "ZeroGPU large (48 GB VRAM)",
+  "max_new_tokens_default": 512,
+  "max_new_tokens_limit": 2048,
+  "context_limit": 8192,
+  "production_enabled": false,
+  "changes_existing_provider": false,
+  "readiness": "isolated-source-added-space-not-created-live-inference-not-tested"
+}

@@ -1,0 +1,715 @@
+{
+  "name": "FreeApp-AI 50-task isolated model evaluation",
+  "version": "1.0",
+  "categories": [
+    "reasoning",
+    "research",
+    "programming",
+    "debugging",
+    "app_building"
+  ],
+  "total_cases": 50,
+  "scoring_policy": "Binary rubric items; category percentage = earned rubric points / available rubric points * 100; overall percentage = total earned / total available * 100. Report category scores and raw counts. Keep prompts and scoring fixed for baseline/candidate.",
+  "cases": [
+    {
+      "id": "REASONING-01",
+      "category": "reasoning",
+      "title": "Constraint scheduling",
+      "prompt": "A technician must complete A before B; C must happen after B; D can happen anytime. There are four one-hour slots. Give one valid schedule and explain why it satisfies every constraint.",
+      "rubric": [
+        "A before B",
+        "B before C",
+        "D scheduled",
+        "constraints checked"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "REASONING-02",
+      "category": "reasoning",
+      "title": "Deductive logic",
+      "prompt": "All encrypted archives require a key. File X is an encrypted archive. What follows, and what does not follow about who owns the key?",
+      "rubric": [
+        "key required",
+        "does not infer owner",
+        "distinguishes fact from assumption",
+        "clear conclusion"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "REASONING-03",
+      "category": "reasoning",
+      "title": "Probability",
+      "prompt": "A bag has 3 red and 2 blue balls. Two balls are drawn without replacement. Calculate the probability both are red and show the calculation.",
+      "rubric": [
+        "3/5 first probability",
+        "2/4 second probability",
+        "3/10 final",
+        "calculation shown"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "REASONING-04",
+      "category": "reasoning",
+      "title": "Causal reasoning",
+      "prompt": "A website becomes slower after a redesign, but traffic also doubled that day. Give at least three plausible explanations and a test to separate them.",
+      "rubric": [
+        "multiple hypotheses",
+        "traffic considered",
+        "controlled comparison",
+        "measurable test"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "REASONING-05",
+      "category": "reasoning",
+      "title": "Trade-off analysis",
+      "prompt": "Choose between a fast but unreliable service and a slower service with 99.9% availability for a payment workflow. State assumptions and justify.",
+      "rubric": [
+        "payment reliability priority",
+        "latency tradeoff",
+        "assumptions stated",
+        "decision justified"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "REASONING-06",
+      "category": "reasoning",
+      "title": "Error spotting",
+      "prompt": "A report says every successful request was cached; request 41 succeeded; therefore request 41 was cached. Identify whether the inference is valid and explain.",
+      "rubric": [
+        "recognizes affirming consequent/fallacy",
+        "counterexample",
+        "correct reasoning",
+        "clear explanation"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "REASONING-07",
+      "category": "reasoning",
+      "title": "Multi-step arithmetic",
+      "prompt": "A device costs 240, receives a 15% discount, then 8% tax is added to the discounted price. Calculate final price.",
+      "rubric": [
+        "discount 36",
+        "discounted 204",
+        "tax 16.32",
+        "final 220.32"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "REASONING-08",
+      "category": "reasoning",
+      "title": "Decision under uncertainty",
+      "prompt": "Two fixes are available: one likely fixes a crash but risks data loss; the other only improves logs. Give a safe sequence of actions.",
+      "rubric": [
+        "backup first",
+        "reproduce/diagnose",
+        "safe mitigation",
+        "verify recovery"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "REASONING-09",
+      "category": "reasoning",
+      "title": "Consistency check",
+      "prompt": "A system claims it never stores passwords in plain text but logs complete login request bodies. Explain the contradiction and remediation.",
+      "rubric": [
+        "identifies credential exposure",
+        "logs are storage",
+        "redaction",
+        "rotation/incident response"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "REASONING-10",
+      "category": "reasoning",
+      "title": "Structured inference",
+      "prompt": "If service A fails, requests route to B. A is healthy, but B receives traffic. Give possible explanations without assuming the rule is false.",
+      "rubric": [
+        "other routing causes",
+        "health check distinction",
+        "cache/weights/manual routing",
+        "test suggestions"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "RESEARCH-01",
+      "category": "research",
+      "title": "Source verification",
+      "prompt": "Explain how to verify the current minimum Android SDK requirement for a named library. List authoritative source types and how to record version/date.",
+      "rubric": [
+        "official docs",
+        "release notes/repository",
+        "version and date",
+        "no fabricated citation"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "RESEARCH-02",
+      "category": "research",
+      "title": "Conflicting sources",
+      "prompt": "Two sources report different release dates for a software version. Describe a source hierarchy and reconciliation method.",
+      "rubric": [
+        "primary source priority",
+        "timezone/tag distinction",
+        "release artifacts",
+        "uncertainty disclosed"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "RESEARCH-03",
+      "category": "research",
+      "title": "Evidence summary",
+      "prompt": "Summarize a hypothetical claim that a library supports Android 8.1. State what evidence would be sufficient and what would not.",
+      "rubric": [
+        "compatibility metadata",
+        "minSdk evidence",
+        "test/device evidence",
+        "limits"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "RESEARCH-04",
+      "category": "research",
+      "title": "Research plan",
+      "prompt": "Create a research plan to compare three free model-hosting services for a small inference API.",
+      "rubric": [
+        "official pricing/hardware docs",
+        "quota/sleep/limits",
+        "date checked",
+        "comparison criteria"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "RESEARCH-05",
+      "category": "research",
+      "title": "Citation discipline",
+      "prompt": "A user asks for the latest API parameter. Explain how to cite official docs and avoid relying on stale tutorials.",
+      "rubric": [
+        "official current docs",
+        "version pinning",
+        "date/freshness",
+        "distinguishes fact from inference"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "RESEARCH-06",
+      "category": "research",
+      "title": "Fact checking",
+      "prompt": "A blog claims a free GPU host provides unlimited 24/7 compute. List checks needed before accepting this claim.",
+      "rubric": [
+        "official pricing",
+        "quota/sleep policy",
+        "terms/eligibility",
+        "independent verification"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "RESEARCH-07",
+      "category": "research",
+      "title": "Technical comparison",
+      "prompt": "Describe how to compare two open-weight models fairly without treating parameter count as intelligence.",
+      "rubric": [
+        "same tasks/prompts",
+        "hardware and quantization",
+        "latency/cost",
+        "quality rubric"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "RESEARCH-08",
+      "category": "research",
+      "title": "Security research",
+      "prompt": "Find what should be checked before exposing an inference endpoint publicly.",
+      "rubric": [
+        "authentication",
+        "rate limits",
+        "TLS/secrets",
+        "abuse/logging controls"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "RESEARCH-09",
+      "category": "research",
+      "title": "Research uncertainty",
+      "prompt": "How should an assistant respond when authoritative sources do not establish an answer?",
+      "rubric": [
+        "states unknown",
+        "shows sources searched",
+        "no invented detail",
+        "next verification step"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "RESEARCH-10",
+      "category": "research",
+      "title": "Reproducibility",
+      "prompt": "Specify the evidence bundle needed so another engineer can reproduce a model benchmark.",
+      "rubric": [
+        "model revision/hash",
+        "prompt set/scoring",
+        "runtime/hardware",
+        "raw outputs and timestamp"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "PROGRAMMING-01",
+      "category": "programming",
+      "title": "Python function",
+      "prompt": "Write a Python function that returns the second-largest distinct integer, handles duplicates, and raises ValueError when fewer than two distinct values exist.",
+      "rubric": [
+        "correct algorithm",
+        "duplicates handled",
+        "ValueError",
+        "examples/tests"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "PROGRAMMING-02",
+      "category": "programming",
+      "title": "Java parser",
+      "prompt": "Write Java code to parse a decimal multiplier such as 1.89 without dropping the leading digit; reject malformed values.",
+      "rubric": [
+        "BigDecimal or safe parse",
+        "1.89 preserved",
+        "validation",
+        "test cases"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "PROGRAMMING-03",
+      "category": "programming",
+      "title": "REST endpoint",
+      "prompt": "Implement a minimal authenticated POST endpoint with JSON validation and safe error responses.",
+      "rubric": [
+        "authentication",
+        "schema validation",
+        "safe errors",
+        "no secret logging"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "PROGRAMMING-04",
+      "category": "programming",
+      "title": "Data structure",
+      "prompt": "Implement an LRU cache with get and put operations and explain time complexity.",
+      "rubric": [
+        "eviction correctness",
+        "updates recency",
+        "O(1) average",
+        "tests"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "PROGRAMMING-05",
+      "category": "programming",
+      "title": "SQL transaction",
+      "prompt": "Write SQL transaction logic to debit one account and credit another atomically, preventing negative balances.",
+      "rubric": [
+        "transaction",
+        "row locking/conditional update",
+        "rollback",
+        "nonnegative invariant"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "PROGRAMMING-06",
+      "category": "programming",
+      "title": "Android lifecycle",
+      "prompt": "Show Kotlin code to register and unregister a screen-capture listener safely across Activity lifecycle events.",
+      "rubric": [
+        "lifecycle-safe",
+        "cleanup",
+        "permission handling",
+        "error paths"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "PROGRAMMING-07",
+      "category": "programming",
+      "title": "Concurrency",
+      "prompt": "Write a thread-safe counter in Java and demonstrate a test that would catch a race condition.",
+      "rubric": [
+        "synchronization/atomic",
+        "safe increment",
+        "concurrent test",
+        "explanation"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "PROGRAMMING-08",
+      "category": "programming",
+      "title": "File processing",
+      "prompt": "Write Python code to stream a large CSV and count valid/invalid rows without loading the whole file.",
+      "rubric": [
+        "streaming",
+        "validation",
+        "counts",
+        "encoding/errors"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "PROGRAMMING-09",
+      "category": "programming",
+      "title": "API client",
+      "prompt": "Write a retrying HTTP client with exponential backoff that does not retry non-retryable 4xx responses.",
+      "rubric": [
+        "backoff",
+        "retry policy",
+        "4xx distinction",
+        "timeout/cap"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "PROGRAMMING-10",
+      "category": "programming",
+      "title": "Unit conversion",
+      "prompt": "Write a TypeScript function converting bytes to MiB with input validation and tests for boundary values.",
+      "rubric": [
+        "1024 squared",
+        "validation",
+        "boundary tests",
+        "correct types"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "DEBUGGING-01",
+      "category": "debugging",
+      "title": "Decimal truncation bug",
+      "prompt": "A parser turns 1.89 into 89.00. Diagnose likely causes and propose a minimal fix plus regression tests.",
+      "rubric": [
+        "leading digit loss diagnosis",
+        "avoid string slicing mistake",
+        "minimal fix",
+        "regression tests"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "DEBUGGING-02",
+      "category": "debugging",
+      "title": "Memory leak",
+      "prompt": "An Android overlay disappears/reappears repeatedly and memory grows. Give a diagnostic sequence and likely lifecycle leaks.",
+      "rubric": [
+        "reproduce/profile",
+        "listener/window cleanup",
+        "lifecycle ownership",
+        "verification"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "DEBUGGING-03",
+      "category": "debugging",
+      "title": "Race condition",
+      "prompt": "Two workers occasionally overwrite newer results with older results. Explain root cause and implement a safe ordering strategy.",
+      "rubric": [
+        "race identified",
+        "sequence/version guard",
+        "atomic update",
+        "test"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "DEBUGGING-04",
+      "category": "debugging",
+      "title": "HTTP 401",
+      "prompt": "An API worked locally but returns 401 in deployment. List likely causes and a stepwise diagnosis without exposing secrets.",
+      "rubric": [
+        "secret config",
+        "header format",
+        "environment mismatch",
+        "safe diagnostics"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "DEBUGGING-05",
+      "category": "debugging",
+      "title": "Slow inference",
+      "prompt": "A model endpoint has high first-token latency and variable response times. Separate cold start, queueing, loading and generation.",
+      "rubric": [
+        "cold start",
+        "queue",
+        "model load",
+        "timing instrumentation"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "DEBUGGING-06",
+      "category": "debugging",
+      "title": "Build failure",
+      "prompt": "Gradle reports a dependency requires a newer compile SDK. Explain compatible repair choices and what not to change blindly.",
+      "rubric": [
+        "read exact error",
+        "SDK/toolchain alignment",
+        "minimal change",
+        "rebuild validation"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "DEBUGGING-07",
+      "category": "debugging",
+      "title": "Flaky test",
+      "prompt": "A test passes alone but fails in the full suite. Diagnose shared state and propose isolation.",
+      "rubric": [
+        "shared state",
+        "order dependence",
+        "fixtures/reset",
+        "repeat suite"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "DEBUGGING-08",
+      "category": "debugging",
+      "title": "Wrong cache result",
+      "prompt": "A cache returns stale user data after account switching. Identify key design flaw and fix.",
+      "rubric": [
+        "user scoping",
+        "cache key",
+        "invalidation",
+        "cross-user test"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "DEBUGGING-09",
+      "category": "debugging",
+      "title": "Null crash",
+      "prompt": "A Kotlin app crashes when an optional server field is absent. Show defensive parsing and tests.",
+      "rubric": [
+        "nullable handling",
+        "defaults or explicit error",
+        "no unsafe !!",
+        "tests"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "DEBUGGING-10",
+      "category": "debugging",
+      "title": "Regression diagnosis",
+      "prompt": "A new provider improves one category but lowers app-building. Explain how to isolate and prevent regression.",
+      "rubric": [
+        "routing separation",
+        "frozen benchmark",
+        "per-category reports",
+        "rollback gate"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "APP_BUILDING-01",
+      "category": "app_building",
+      "title": "Offline notes app",
+      "prompt": "Design a complete Android offline notes app with local persistence, search, backup/export and acceptance tests.",
+      "rubric": [
+        "architecture",
+        "database/schema",
+        "offline behaviour",
+        "acceptance tests"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "APP_BUILDING-02",
+      "category": "app_building",
+      "title": "Inventory app",
+      "prompt": "Specify a stock app with products, stock movements, low-stock alerts and audit history.",
+      "rubric": [
+        "data model",
+        "transaction-safe movements",
+        "alerts",
+        "audit tests"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "APP_BUILDING-03",
+      "category": "app_building",
+      "title": "Expense tracker",
+      "prompt": "Build plan and core implementation outline for an expense tracker with budgets, categories and monthly reports.",
+      "rubric": [
+        "architecture",
+        "correct money arithmetic",
+        "budget/report logic",
+        "tests"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "APP_BUILDING-04",
+      "category": "app_building",
+      "title": "Chat app",
+      "prompt": "Design a reliable chat app with local message queue, delivery states and reconnect handling.",
+      "rubric": [
+        "message model",
+        "queue/retry",
+        "delivery states",
+        "reconnect tests"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "APP_BUILDING-05",
+      "category": "app_building",
+      "title": "Authentication app",
+      "prompt": "Plan secure sign-in, session refresh, logout and account recovery.",
+      "rubric": [
+        "secure token storage",
+        "refresh/expiry",
+        "logout invalidation",
+        "security tests"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "APP_BUILDING-06",
+      "category": "app_building",
+      "title": "Camera utility",
+      "prompt": "Build an Android camera utility with runtime permissions, lifecycle handling and saved media.",
+      "rubric": [
+        "permission flow",
+        "lifecycle",
+        "storage handling",
+        "device tests"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "APP_BUILDING-07",
+      "category": "app_building",
+      "title": "Task manager",
+      "prompt": "Create a task manager with recurring tasks, reminders and timezone-safe scheduling.",
+      "rubric": [
+        "task schema",
+        "recurrence",
+        "timezone handling",
+        "tests"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "APP_BUILDING-08",
+      "category": "app_building",
+      "title": "Learning app",
+      "prompt": "Design a learning app with lessons, progress tracking, offline access and sync conflict handling.",
+      "rubric": [
+        "content model",
+        "progress persistence",
+        "offline sync",
+        "conflict tests"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "APP_BUILDING-09",
+      "category": "app_building",
+      "title": "Service booking app",
+      "prompt": "Design a booking app preventing double bookings and handling cancellations/refunds.",
+      "rubric": [
+        "availability model",
+        "atomic reservation",
+        "cancellation states",
+        "concurrency tests"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    },
+    {
+      "id": "APP_BUILDING-10",
+      "category": "app_building",
+      "title": "App delivery workflow",
+      "prompt": "Specify an end-to-end Android build/release workflow including signing, artifact validation and rollback.",
+      "rubric": [
+        "reproducible build",
+        "secure signing",
+        "APK validation",
+        "release/rollback"
+      ],
+      "max_score": 4,
+      "scoring": "Each rubric item is scored 0 or 1 by review; no model capability score until a real completion is collected and graded."
+    }
+  ]
+}

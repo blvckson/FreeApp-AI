@@ -1,0 +1,43 @@
+name: Isolated Hugging Face ZeroGPU Experiment Validation
+
+on:
+  push:
+    branches:
+      - "experiment/hf-zerogpu-qwen7b-isolated"
+    paths:
+      - "experiments/hf-zerogpu/**"
+      - ".github/workflows/hf-zerogpu-experiment-validation.yml"
+  pull_request:
+    paths:
+      - "experiments/hf-zerogpu/**"
+      - ".github/workflows/hf-zerogpu-experiment-validation.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-experiment-only:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate Python syntax
+        run: python -m py_compile experiments/hf-zerogpu/app.py experiments/hf-zerogpu/test_protocol.py experiments/hf-zerogpu/protocol.py experiments/hf-zerogpu/run_benchmark.py experiments/hf-zerogpu/test_benchmark_dataset.py
+      - name: Run isolated protocol tests
+        run: python -m unittest discover -s experiments/hf-zerogpu -p 'test_*.py' -v
+      - name: Validate model profile and isolation guards
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p = json.loads(Path("experiments/hf-zerogpu/model-profile.json").read_text())
+          assert p["model_id"] == "Qwen/Qwen2.5-7B-Instruct"
+          assert p["production_enabled"] is False
+          assert p["changes_existing_provider"] is False
+          assert "FREEAPP_SPACE_API_KEY" in Path("experiments/hf-zerogpu/app.py").read_text()
+          assert "@spaces.GPU" in Path("experiments/hf-zerogpu/app.py").read_text()
+          print("Isolated experiment profile and guards validated.")
+          PY
