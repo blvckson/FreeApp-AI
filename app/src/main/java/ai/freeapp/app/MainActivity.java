@@ -23,6 +23,7 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import androidx.webkit.WebViewAssetLoader;
 import androidx.webkit.WebViewClientCompat;
+import ai.freeapp.app.server.PhoneHostedServerService;
 
 public class MainActivity extends Activity {
     private static final int AUDIO_PERMISSION_REQUEST = 1001;
@@ -225,6 +226,38 @@ public class MainActivity extends Activity {
     }
 
     private final class NativePhoneControl {
+        @JavascriptInterface
+        public void startLocalServer() {
+            runOnUiThread(() -> {
+                try {
+                    Intent intent = new Intent(MainActivity.this, PhoneHostedServerService.class);
+                    intent.setAction(PhoneHostedServerService.ACTION_START);
+                    if (android.os.Build.VERSION.SDK_INT >= 26) startForegroundService(intent);
+                    else startService(intent);
+                    android.widget.Toast.makeText(MainActivity.this,
+                            "FreeApp AI local server starting. Local API: 127.0.0.1:8765",
+                            android.widget.Toast.LENGTH_LONG).show();
+                } catch (Exception e) {
+                    android.widget.Toast.makeText(MainActivity.this,
+                            "Could not start the local server: " + e.getMessage(),
+                            android.widget.Toast.LENGTH_LONG).show();
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void stopLocalServer() {
+            runOnUiThread(() -> {
+                Intent intent = new Intent(MainActivity.this, PhoneHostedServerService.class);
+                intent.setAction(PhoneHostedServerService.ACTION_STOP);
+                try { startService(intent); }
+                catch (Exception e) {
+                    android.widget.Toast.makeText(MainActivity.this,
+                            "Could not stop the local server.", android.widget.Toast.LENGTH_LONG).show();
+                }
+            });
+        }
+
         @JavascriptInterface
         public boolean isSupported() { return android.os.Build.VERSION.SDK_INT >= 24; }
 
