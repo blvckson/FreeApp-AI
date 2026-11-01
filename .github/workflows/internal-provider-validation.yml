@@ -25,9 +25,12 @@ jobs:
         run: npm install --ignore-scripts
       - name: Run existing regression tests
         run: npm test
-      - name: Validate provider deployment files
+      - name: Validate model profile and deployment files
         run: |
+          node -e 'const p=require("./provider/model-profile.json"); if(!p.upstream_model || !p.artifact_url.startsWith("https://") || !/^[a-f0-9]{64}$/i.test(p.sha256) || p.readiness !== "baseline-configured-not-yet-deployed-or-benchmarked") process.exit(1); console.log("Model profile metadata valid:", p.upstream_model);'
           test -s provider/docker-compose.yml
           test -s provider/README.md
           test -s provider/download-model.sh
+          test -s provider/smoke-test.sh
           sh -n provider/download-model.sh
+          sh -n provider/smoke-test.sh

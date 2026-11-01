@@ -1,7 +1,7 @@
 services:
   freeapp-inference:
-    # Optional reference adapter. Replace this service with any engine that
-    # implements the provider contract in ENGINE-CONTRACT.md.
+    # FreeApp AI's replaceable internal inference runtime.
+    # The initial open-weight model is downloaded separately by download-model.sh.
     image: ghcr.io/ggml-org/llama.cpp:server
     container_name: freeapp-ai-inference
     restart: unless-stopped
@@ -10,12 +10,13 @@ services:
     volumes:
       - ./models:/models:ro
     environment:
-      LLAMA_ARG_MODEL: /models/${MODEL_FILE:?Set MODEL_FILE to a compatible local model filename}
+      LLAMA_ARG_MODEL: /models/${MODEL_FILE:-SmolLM2-1.7B-Instruct-Q4_K_M.gguf}
       LLAMA_ARG_HOST: 0.0.0.0
       LLAMA_ARG_PORT: "8080"
-      LLAMA_ARG_CTX_SIZE: ${MODEL_CONTEXT_SIZE:-8192}
+      LLAMA_ARG_CTX_SIZE: ${MODEL_CONTEXT_SIZE:-4096}
+      LLAMA_ARG_N_PARALLEL: "1"
       LLAMA_API_KEY: ${LLAMA_API_KEY:?Set LLAMA_API_KEY in provider/.env}
-    command: ["--model", "/models/${MODEL_FILE:?Set MODEL_FILE}", "--alias", "${MODEL_ALIAS:-freeapp-engine}", "--host", "0.0.0.0", "--port", "8080", "--ctx-size", "${MODEL_CONTEXT_SIZE:-8192}", "--api-key", "${LLAMA_API_KEY}"]
+    command: ["--model", "/models/${MODEL_FILE:-SmolLM2-1.7B-Instruct-Q4_K_M.gguf}", "--alias", "${MODEL_ALIAS:-freeapp-ai-base}", "--host", "0.0.0.0", "--port", "8080", "--ctx-size", "${MODEL_CONTEXT_SIZE:-4096}", "--parallel", "1", "--api-key", "${LLAMA_API_KEY}"]
     healthcheck:
       test: ["CMD", "bash", "-lc", "curl -fsS http://127.0.0.1:8080/health || exit 1"]
       interval: 30s

@@ -1,45 +1,60 @@
-# FreeApp AI — independent, model-agnostic inference provider
+# FreeApp AI — independent inference provider and model
 
-FreeApp AI owns the provider interface, request routing, authentication boundary, response normalization, and provider configuration. The inference engine is a replaceable implementation behind that interface. **No named model or model vendor is mandatory.**
+FreeApp AI owns its provider interface, request routing, authentication boundary, response normalization, prompt orchestration, and model/runtime configuration. The inference engine and model artifact are replaceable behind that interface.
+
+**Important distinction:** this project does not claim to have trained a new foundation model from scratch. It uses an open-weight upstream model as the initial inference model while FreeApp AI owns the surrounding inference system and can replace or fine-tune the weights later. The model runs on the external compute host; it is not bundled into the Android APK.
 
 ## Architecture
 
-`FreeApp AI application → FreeApp AI Worker → internal provider contract → replaceable inference engine`
+`FreeApp AI app → FreeApp AI Worker → authenticated FreeApp AI inference endpoint → llama.cpp runtime → selected model weights`
 
-The internal provider speaks an OpenAI-compatible chat-completions contract at `/v1/chat/completions`. An engine can be replaced without changing FreeApp AI's application logic as long as it implements that contract directly or is wrapped by a thin adapter. The reference llama.cpp Compose service is optional—not the definition of the provider.
+The internal provider speaks an OpenAI-compatible chat-completions contract at `/v1/chat/completions`. External AI APIs remain optional compatibility fallbacks; they are not the internal model. The Worker can run internal-first, or internal-only after live validation.
 
-External model services (Kilo, LLM7, Gemini, Pollinations, and managed Workers AI) are not the independent provider. Existing compatibility integrations remain separate and can be disabled with strict internal-only mode.
+## Initial model profile
 
-## Engine contract
+The first reproducible baseline is defined in [model-profile.json](model-profile.json):
 
-See [ENGINE-CONTRACT.md](ENGINE-CONTRACT.md) for request/response requirements, adapter responsibilities, health checks, and conformance tests.
+- Model: HuggingFaceTB/SmolLM2-1.7B-Instruct
+- Format/quantization: GGUF Q4_K_M
+- Approximate artifact size: 1.06 GB
+- Runtime: llama.cpp
+- Context configured for first test: 4,096 tokens
+- Host memory: at least 4 GB recommended for initial single-request testing; more is needed for concurrency.
+- License: Apache-2.0 for the upstream model; retain its notices and check the model card before redistribution.
 
-## Optional reference runtime
+This is a small bootstrap model. It must be benchmarked against FreeApp AI's reasoning, programming, debugging, app-building, and research tasks. It is not represented as ChatGPT-equivalent. A stronger model can replace it without changing the app-facing API.
 
-The included `docker-compose.yml` is one replaceable adapter example using llama.cpp. It requires a model artifact selected by the operator; it does not download, select, or require a particular vendor's model.
+## Deploy the inference runtime
 
-1. Install Docker Engine and Docker Compose on a machine you control.
-2. Copy `.env.example` to `.env` and set a long random API key.
-3. Put a compatible model artifact in `provider/models/`, or download one using the generic script:
-   `MODEL_URL='<artifact URL>' MODEL_FILENAME='model.gguf' sh download-model.sh`.
-4. Set `MODEL_FILE=model.gguf` in `.env` (plus optional `MODEL_ALIAS` and `MODEL_CONTEXT_SIZE`).
-5. Run `docker compose --env-file .env up -d`.
-6. Put the service behind authenticated HTTPS or a private network tunnel. Do not expose port 8080 directly to the public internet.
+1. Use a Linux host with Docker Engine/Compose, persistent disk of at least 3 GB, and at least 4 GB RAM for the first smoke test. A free host may sleep, impose quotas, or lack sufficient memory; GitHub Actions is not an always-on inference server.
+2. Copy `.env.example` to `.env` and set a long random `LLAMA_API_KEY`. Keep `.env` private.
+3. Download and verify the default open-weight model:
 
-A different inference engine can replace this Compose service if it satisfies the engine contract. The Worker only needs the protected HTTPS base URL and optional model alias; it does not need to know the engine brand.
+   `sh download-model.sh`
+
+   The script verifies the pinned SHA-256 before installing the file. Override `MODEL_URL`, `MODEL_FILENAME`, and `MODEL_SHA256` to use another compatible GGUF model.
+4. Start the runtime:
+
+   `docker compose --env-file .env up -d`
+
+5. Check readiness and a real completion:
+
+   `FREEAPP_INTERNAL_PROVIDER_URL=http://127.0.0.1:8080 FREEAPP_INTERNAL_API_KEY='<same-key>' sh smoke-test.sh`
+
+6. Put the endpoint behind authenticated HTTPS or a private network tunnel before connecting a remote Worker. Do not expose port 8080 directly to the public internet.
 
 ## Connect the FreeApp AI Worker
 
-Configure:
+Configure Worker secrets/variables:
 
-- `FREEAPP_INTERNAL_PROVIDER_URL`: protected HTTPS base URL of the internal provider adapter.
-- `FREEAPP_INTERNAL_API_KEY`: same secret configured on the provider.
-- `FREEAPP_INTERNAL_MODEL`: optional model/engine alias understood by the adapter; default is `freeapp-engine`.
-- `FREEAPP_INTERNAL_TIMEOUT_MS`: optional; default 90000, maximum 180000.
-- `FREEAPP_INTERNAL_ONLY=true`: make this provider the sole text-generation route. If it is unavailable, FreeApp AI returns an explicit provider error rather than silently switching to an external service.
+- `FREEAPP_INTERNAL_PROVIDER_URL`: protected HTTPS base URL of this inference endpoint.
+- `FREEAPP_INTERNAL_API_KEY`: same secret configured on the inference host.
+- `FREEAPP_INTERNAL_MODEL=freeapp-ai-base`: configured model alias.
+- `FREEAPP_INTERNAL_TIMEOUT_MS`: bounded request timeout (default 90 seconds, maximum 180 seconds).
+- `FREEAPP_INTERNAL_ONLY=true`: optional strict mode; enable only after the internal endpoint is live and all required benchmarks pass.
 
-The internal endpoint is attempted first. Without strict mode, existing external compatibility routing may still be used when the internal endpoint is not configured or fails. Strict mode is the setting that enforces independence.
+The internal model is attempted first when configured. Existing external provider integrations remain separate compatibility fallbacks unless strict internal-only mode is enabled. Do not enable strict mode while the internal host is unavailable.
 
-## Hosting reality
+## Validation status
 
-This repository supplies provider software and the integration, not compute or free hosting. Live inference requires an always-on reachable host with enough RAM/CPU/GPU and disk for the chosen engine and model. Free hosting services may sleep, limit compute, or disconnect; GitHub Actions is not an always-on inference server. Do not enable strict mode until the internal endpoint is live and passes the project's reasoning, programming, app-building, research-synthesis, and reliability benchmarks.
+Repository CI validates syntax, manifest integrity, deployment files, and existing regression tests. That does **not** prove live model inference. A live endpoint smoke test and task benchmark are still required after deployment. No benchmark score, APK integration, or successful live hosting is claimed until those tests actually run.
