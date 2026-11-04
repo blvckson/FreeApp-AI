@@ -1487,12 +1487,17 @@ async function runInternalModelProvider(env, settings) {
   try { parsedBase = new URL(base); } catch { throw new Error("FREEAPP_INTERNAL_PROVIDER_URL must be an HTTP(S) URL."); }
   if (parsedBase.protocol !== "https:" && parsedBase.protocol !== "http:") throw new Error("FREEAPP_INTERNAL_PROVIDER_URL must be an HTTP(S) URL.");
   const timeoutMs = Math.max(5000, Math.min(Number(env.FREEAPP_INTERNAL_TIMEOUT_MS) || 90000, 180000));
-  const headers = { "content-type": "application/json", "accept": "application/json" };
-  if (env.FREEAPP_INTERNAL_API_KEY) headers.authorization = "Bearer " + String(env.FREEAPP_INTERNAL_API_KEY).trim();
+  const apiKey = String(env.FREEAPP_INTERNAL_API_KEY || "").trim();
+  if (!apiKey) throw new Error("FREEAPP_INTERNAL_API_KEY is required for the hosted internal inference endpoint.");
+  const headers = {
+    "content-type": "application/json",
+    "accept": "application/json",
+    authorization: "Bearer " + apiKey
+  };
   const response = await fetch(base + "/v1/chat/completions", {
     method: "POST", headers,
     body: JSON.stringify({
-      model: String(env.FREEAPP_INTERNAL_MODEL || "freeapp-engine"),
+      model: String(env.FREEAPP_INTERNAL_MODEL || "freeapp-ai-base"),
       messages: settings.messages,
       max_tokens: Math.min(Number(settings.max_tokens) || 4096, settings.programming ? 7000 : 5000),
       temperature: settings.temperature ?? 0.2,
