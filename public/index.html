@@ -69,6 +69,18 @@
       <div id="github-coding-status" class="status" aria-live="polite">No repository changes are made until you run a coding task. Changes are committed to a new branch and submitted as a pull request—not directly to the default branch. The agent does not merge, deploy, or publish releases. Build/test results are reported only when GitHub Actions returns evidence.</div>
       <div id="github-coding-result" class="website-result" aria-live="polite"></div>
     </section>
+    <section class="card server-card" id="phone-server-card">
+      <h2>FreeApp AI Phone Server</h2>
+      <p>Start a local server on this phone and inspect its memory pressure. This first phase is local-only; it does not yet expose the phone to the internet or run AI models locally.</p>
+      <div class="controls">
+        <button id="server-start-button" type="button">Start Phone Server</button>
+        <button id="server-stop-button" class="secondary-button" type="button">Stop Phone Server</button>
+        <button id="server-refresh-button" class="secondary-button" type="button">Refresh Status</button>
+      </div>
+      <p id="server-status" class="status" aria-live="polite">Server stopped or not yet checked.</p>
+      <pre id="server-memory" class="small" aria-live="polite">Memory status will appear here.</pre>
+      <p class="small">The local API listens on 127.0.0.1:8765. Storage-backed task checkpoints are not RAM and cannot make oversized local AI models fit. Keep the app open during initial device testing.</p>
+    </section>
     <section class="card phone-control-card">
       <h2>Phone Control (Android)</h2>
       <p>FreeApp AI can open supported apps and perform visible screen actions after you enable its accessibility service. Enable it yourself in Android settings and keep the phone unlocked while actions run.</p>
@@ -100,6 +112,7 @@
     </div>
   </div>
 
+  <script src="server-panel.js"></script>
   <script src="coding-agent-guard.js"></script>
   <script src="app.js"></script>
 </body>
