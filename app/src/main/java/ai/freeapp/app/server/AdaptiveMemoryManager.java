@@ -10,14 +10,8 @@ import org.json.JSONObject;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.file.Files;
 
-/**
- * Conservative resource monitor for low-memory Android devices.
- *
- * This is NOT swap and does not pretend storage is equivalent to RAM.
- * It reports memory pressure and provides a bounded disk-backed workspace
- * for resumable task data. Model weights must still fit the device's real RAM.
- */
 public final class AdaptiveMemoryManager {
     private final Context appContext;
     private final File workspace;
@@ -60,22 +54,35 @@ public final class AdaptiveMemoryManager {
         return out;
     }
 
-    /** Save small resumable task state, not model weights or live process memory. */
     public synchronized boolean saveTaskState(String taskId, byte[] data) throws IOException {
         if (taskId == null || !taskId.matches("[A-Za-z0-9_-]{1,64}") || data == null) return false;
         if (data.length > 1024 * 1024) throw new IOException("Task state exceeds 1 MiB limit");
-        long current = directorySize(workspace);
+        File target = stateFile(taskId);
+        long current = directorySize(workspace) - (target.exists() ? target.length() : 0);
         if (current + data.length > maxWorkspaceBytes) throw new IOException("Server workspace limit reached");
-        File target = new File(workspace, taskId + ".state");
         File temp = new File(workspace, taskId + ".tmp");
         try (FileOutputStream stream = new FileOutputStream(temp)) {
             stream.write(data);
             stream.getFD().sync();
         }
-        if (target.exists() && !target.delete()) throw new IOException("Cannot replace task state");
-        if (!temp.renameTo(target)) throw new IOException("Cannot commit task state");
+        if (!temp.renameTo(target)) {
+            if (target.exists() && !target.delete()) throw new IOException("Cannot replace task state");
+            if (!temp.renameTo(target)) throw new IOException("Cannot commit task state");
+        }
         return true;
     }
+
+    /** Restore a previously committed checkpoint after process/service recreation. */
+    public synchronized byte[] loadTaskState(String taskId) throws IOException {
+        if (taskId == null || !taskId.matches("[A-Za-z0-9_-]{1,64}")) return null;
+        File target = stateFile(taskId);
+        if (!target.isFile()) return null;
+        long length = target.length();
+        if (length > 1024 * 1024) throw new IOException("Task state exceeds 1 MiB limit");
+        return Files.readAllBytes(target.toPath());
+    }
+
+    private File stateFile(String taskId) { return new File(workspace, taskId + ".state"); }
 
     private long directorySize(File file) {
         if (file == null || !file.exists()) return 0;
