@@ -14,9 +14,9 @@ permissions:
   contents: read
 
 jobs:
-  android-build:
+  android-emulator:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -32,12 +32,39 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      - name: Compile debug APK
-        run: gradle assembleDebug --no-daemon
+      - name: Build debug APK and instrumented test APK
+        run: gradle assembleDebug assembleDebugAndroidTest --no-daemon
 
-      - name: Upload validation APK
+      - name: Launch Android 8.1 emulator and run service/API/recovery tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 27
+          target: default
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-boot-timeout: 900
+          script: |
+            adb wait-for-device
+            adb shell getprop sys.boot_completed
+            gradle connectedDebugAndroidTest --no-daemon --stacktrace
+
+      - name: Upload instrumentation reports
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: FreeApp-AI-phone-server-validation
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: phone-server-emulator-test-reports
+          path: |
+            app/build/reports/androidTests/
+            app/build/outputs/androidTest-results/
+          if-no-files-found: warn
+
+      - name: Upload validation APKs
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FreeApp-AI-phone-server-emulator-validated
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
           if-no-files-found: error
