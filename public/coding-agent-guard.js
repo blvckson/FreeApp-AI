@@ -7,19 +7,23 @@
   const MAX_FILES = 12, MAX_TOTAL_CHARS = 30000, MAX_FILE_CHARS = 20000;
   const ALLOWED_EXT = /\.(?:js|mjs|ts|tsx|jsx|html|css|kt|java|gradle|kts|xml|json|py|go|rs|swift|dart|yml|yaml|md|c|cc|cpp|h|hpp|sh|properties|toml)$/i;
 
-  function safePath(path) {
+  const ALLOWED_BASENAMES = new Set(["Dockerfile", "Makefile", "CMakeLists.txt", "gradlew", "Procfile", "LICENSE", "NOTICE", ".gitignore", ".dockerignore", "requirements.txt", "Gemfile", "Rakefile"]);
+  function safePath(path, options = {}) {
     if (typeof path !== "string" || !path || path.length > 240) return false;
-    if (path.startsWith("/") || path.includes("\\") || path.includes("\0")) return false;
+    if (path.startsWith("/") || path.includes("\\\\") || path.includes("\\0")) return false;
     const parts = path.split("/");
     if (parts.some(part => !part || part === "." || part === "..")) return false;
-    if (/(^|\/)(?:\.git|\.env[^/]*|secrets?[^/]*)(?:\/|$)/i.test(path)) return false;
-    if (/\.(?:pem|key|p12|keystore|jks|apk|aab)$/i.test(path) || !ALLOWED_EXT.test(path)) return false;
-    if (/(^|\/)(?:node_modules|build|dist|vendor|\.gradle|\.idea)(?:\/|$)/i.test(path)) return false;
-    if (/(?:^|\/)package-lock\.json$|(?:^|\/)yarn\.lock$|(?:^|\/)pnpm-lock\.yaml$/i.test(path)) return false;
+    if (/(^|\\/)(?:\\.git|\\.env[^/]*|secrets?[^/]*)(?:\\/|$)/i.test(path)) return false;
+    if (/\\.(?:pem|key|p12|keystore|jks|apk|aab)$/i.test(path)) return false;
+    if (/(^|\\/)(?:node_modules|build|dist|vendor|\\.gradle|\\.idea)(?:\\/|$)/i.test(path)) return false;
+    if (/(?:^|\\/)package-lock\\.json$|(?:^|\\/)yarn\\.lock$|(?:^|\\/)pnpm-lock\\.yaml$/i.test(path)) return false;
+    if (/^\\.github\\/workflows\\//i.test(path) && options.allowWorkflowChanges !== true) return false;
+    const basename = parts[parts.length - 1];
+    if (!ALLOWED_EXT.test(path) && !ALLOWED_BASENAMES.has(basename)) return false;
     return true;
   }
 
-  function validateProposal(proposal, inspectedPaths) {
+  function validateProposal(proposal, inspectedPaths, options = {}) {
     const noChange = message => ({ ok: false, noChanges: true, message });
     const fail = message => ({ ok: false, noChanges: false, message });
     if (!proposal || typeof proposal !== "object" || Array.isArray(proposal)) return fail("The AI returned an invalid proposal object.");
@@ -36,16 +40,23 @@
     let total = 0;
     const files = [];
     for (const file of proposal.files) {
-      if (!file || typeof file !== "object" || !safePath(file.path) || typeof file.content !== "string") return fail("The AI returned an invalid, unsupported, or disallowed file path. No changes were made.");
-      if (seen.has(file.path)) return fail("The AI proposed the same file more than once.");
+      if (!file || typeof file !== "object" || !safePath(file.path, options) || seen.has(file.path)) return fail("The AI returned an invalid, duplicate, unsupported, or disallowed file path. No changes were made.");
       seen.add(file.path);
+      const existing = inspected.has(file.path);
+      const operation = file.operation || "upsert";
+      if (operation !== "upsert" && operation !== "delete") return fail("Unsupported file operation: " + operation);
+      if (operation === "delete") {
+        if (!existing || Object.prototype.hasOwnProperty.call(file, "content")) return fail("Only inspected existing files can be deleted, and delete operations cannot include content.");
+        files.push({ path: file.path, operation: "delete" });
+        continue;
+      }
+      if (typeof file.content !== "string") return fail("An upsert operation must include complete UTF-8 file content.");
       if (file.content.length > MAX_FILE_CHARS) return fail("A proposed file exceeds the per-file size limit.");
       total += file.content.length;
-      if (total > MAX_TOTAL_CHARS) return fail("The proposed change exceeds the total size limit. No changes were made.");
-      const existing = inspected.has(file.path);
+      if (total > MAX_TOTAL_CHARS) return fail("The proposed change exceeds the total size limit. No repository changes were made.");
       const newInInspectedDirectory = !existing && directories.some(directory => file.path.startsWith(directory + "/"));
       if (!existing && !newInInspectedDirectory) return fail("The AI proposed a file outside the inspected source files and directories: " + file.path);
-      files.push({ path: file.path, content: file.content });
+      files.push({ path: file.path, content: file.content, operation: "upsert" });
     }
     return { ok: true, noChanges: false, files, summary: proposal.summary, tests: proposal.tests, notes: proposal.notes };
   }
