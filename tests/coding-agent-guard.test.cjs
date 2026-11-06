@@ -57,6 +57,7 @@ test("rejects deletion of an uninspected file and delete content", () => {
 });
 test("allows common build files and blocks workflows unless explicitly requested", () => {
   assert.equal(guard.safePath("Dockerfile"), true);
+  assert.equal(guard.validateProposal(proposal([{ path: "Dockerfile", content: "FROM scratch" }]), ["package.json"]).ok, true);
   assert.equal(guard.safePath(".gitignore"), true);
   assert.equal(guard.safePath(".github/workflows/deploy.yml"), false);
   assert.equal(guard.safePath(".github/workflows/deploy.yml", { allowWorkflowChanges: true }), true);
