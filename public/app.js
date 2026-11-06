@@ -770,7 +770,7 @@ function toDataUrl(file) {
     const source = files.map(f => "\n--- FILE: " + f.path + " ---\n" + f.content).join("\n").slice(0, 36000);
     const instruction = [
       "You are FreeApp AI acting as a careful software engineer modifying an existing GitHub repository.",
-      "Return ONLY valid JSON with this schema: {\"summary\":\"short summary\",\"files\":[{\"path\":\"existing/path or new/path\",\"content\":\"complete UTF-8 file contents\"} OR {\"path\":\"existing/path\",\"operation\":\"delete\"}],\"tests\":[\"test or build command\"],\"notes\":[\"important limitations\"]}.\n" + treePaths.slice(0, 80).join("\n"),
+      "Return ONLY valid JSON with this schema: {\"summary\":\"short summary\",\"files\":[{\"path\":\"existing/path or new/path\",\"content\":\"complete UTF-8 file contents\"}],\"tests\":[\"test or build command\"],\"notes\":[\"important limitations\"]}. For a deletion, use {\"path\":\"existing/path\",\"operation\":\"delete\"} with no content field.\n" + treePaths.slice(0, 80).join("\n"),
       "CURRENT SOURCE FILES:\n" + source,
       "USER'S REQUEST:\n" + prompt
     ].join("\n\n");
