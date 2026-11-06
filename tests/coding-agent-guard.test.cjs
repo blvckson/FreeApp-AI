@@ -45,3 +45,19 @@ test("returns explicit no-change state for empty proposal", () => {
 test("creates eight-character hexadecimal branch suffixes", () => {
   assert.match(guard.randomSuffix(), /^[a-f0-9]{8}$/);
 });
+
+test("accepts deletion only for an inspected existing file", () => {
+  const result = guard.validateProposal(proposal([{ path: "public/app.js", operation: "delete" }]), inspected);
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.files[0], { path: "public/app.js", operation: "delete" });
+});
+test("rejects deletion of an uninspected file and delete content", () => {
+  assert.equal(guard.validateProposal(proposal([{ path: "public/new.js", operation: "delete" }]), inspected).ok, false);
+  assert.equal(guard.validateProposal(proposal([{ path: "public/app.js", operation: "delete", content: "" }]), inspected).ok, false);
+});
+test("allows common build files and blocks workflows unless explicitly requested", () => {
+  assert.equal(guard.safePath("Dockerfile"), true);
+  assert.equal(guard.safePath(".gitignore"), true);
+  assert.equal(guard.safePath(".github/workflows/deploy.yml"), false);
+  assert.equal(guard.safePath(".github/workflows/deploy.yml", { allowWorkflowChanges: true }), true);
+});
