@@ -40,7 +40,8 @@
     let total = 0;
     const files = [];
     for (const file of proposal.files) {
-      if (!file || typeof file !== "object" || !safePath(file.path, options) || seen.has(file.path)) return fail("The AI returned an invalid, duplicate, unsupported, or disallowed file path. No changes were made.");
+      if (!file || typeof file !== "object" || !safePath(file.path, options)) return fail("The AI returned an invalid, unsupported, or disallowed file path. No changes were made.");
+      if (seen.has(file.path)) return fail("The AI proposed the same file more than once.");
       seen.add(file.path);
       const existing = inspected.has(file.path);
       const operation = file.operation || "upsert";
