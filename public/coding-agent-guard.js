@@ -10,14 +10,14 @@
   const ALLOWED_BASENAMES = new Set(["Dockerfile", "Makefile", "CMakeLists.txt", "gradlew", "Procfile", "LICENSE", "NOTICE", ".gitignore", ".dockerignore", "requirements.txt", "Gemfile", "Rakefile"]);
   function safePath(path, options = {}) {
     if (typeof path !== "string" || !path || path.length > 240) return false;
-    if (path.startsWith("/") || path.includes("\\\\") || path.includes("\\0")) return false;
+    if (path.startsWith("/") || path.includes("\\") || path.includes("\0")) return false;
     const parts = path.split("/");
     if (parts.some(part => !part || part === "." || part === "..")) return false;
-    if (/(^|\\/)(?:\\.git|\\.env[^/]*|secrets?[^/]*)(?:\\/|$)/i.test(path)) return false;
-    if (/\\.(?:pem|key|p12|keystore|jks|apk|aab)$/i.test(path)) return false;
-    if (/(^|\\/)(?:node_modules|build|dist|vendor|\\.gradle|\\.idea)(?:\\/|$)/i.test(path)) return false;
-    if (/(?:^|\\/)package-lock\\.json$|(?:^|\\/)yarn\\.lock$|(?:^|\\/)pnpm-lock\\.yaml$/i.test(path)) return false;
-    if (/^\\.github\\/workflows\\//i.test(path) && options.allowWorkflowChanges !== true) return false;
+    if (/(^|\/)(?:\.git|\.env[^/]*|secrets?[^/]*)(?:\/|$)/i.test(path)) return false;
+    if (/\.(?:pem|key|p12|keystore|jks|apk|aab)$/i.test(path)) return false;
+    if (/(^|\/)(?:node_modules|build|dist|vendor|\.gradle|\.idea)(?:\/|$)/i.test(path)) return false;
+    if (/(?:^|\/)package-lock\.json$|(?:^|\/)yarn\.lock$|(?:^|\/)pnpm-lock\.yaml$/i.test(path)) return false;
+    if (/^\.github\/workflows\//i.test(path) && options.allowWorkflowChanges !== true) return false;
     const basename = parts[parts.length - 1];
     if (!ALLOWED_EXT.test(path) && !ALLOWED_BASENAMES.has(basename)) return false;
     return true;
