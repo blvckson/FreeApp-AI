@@ -1158,7 +1158,7 @@ function toDataUrl(file) {
       const proposal = await askForPatch(task, loaded, candidates.map(x => x.path));
       lastTask = task;
       const validation = window.FreeAppCodingGuard.validateProposal(proposal, loaded.map(file => file.path), {
-        allowWorkflowChanges: /\\b(workflow|github actions|ci\\/cd|deployment workflow|deploy workflow)\\b/i.test(task)
+        allowWorkflowChanges: /\b(workflow|github actions|ci\/cd|deployment workflow|deploy workflow)\b/i.test(task)
       });
       if (!validation.ok) {
         if (validation.noChanges) {
