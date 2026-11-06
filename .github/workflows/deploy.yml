@@ -16,8 +16,13 @@ jobs:
       - name: Install Worker dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Validate Worker JavaScript syntax
-        run: node --check worker.js
+      - name: Validate Worker and browser JavaScript
+        run: |
+          node --check worker.js
+          npm run check:js
+
+      - name: Run regression tests before production deployment
+        run: npm test
 
       - name: Configure Gemini secret on Worker
         env:
