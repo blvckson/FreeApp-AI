@@ -20,7 +20,7 @@ test("rejects a new file at repository root", () => {
   assert.equal(guard.validateProposal(proposal([{ path: "surprise.js", content: "bad" }]), inspected).ok, false);
 });
 test("rejects traversal and secret paths", () => {
-  for (const path of ["../worker.js", "src/../worker.js", ".env", "config/secrets.json", "keys/private.pem", "src\\\\escape.js", "src/\\0escape.js"]) assert.equal(guard.safePath(path), false, path);
+  for (const path of ["../worker.js", "src/../worker.js", ".env", "config/secrets.json", "keys/private.pem", "src\\escape.js", "src/\0escape.js"]) assert.equal(guard.safePath(path), false, path);
 });
 test("rejects duplicate paths", () => {
   const result = guard.validateProposal(proposal([{path:"public/app.js",content:"a"},{path:"public/app.js",content:"b"}]), inspected);
