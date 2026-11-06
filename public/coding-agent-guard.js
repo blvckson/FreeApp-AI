@@ -7,7 +7,7 @@
   const MAX_FILES = 12, MAX_TOTAL_CHARS = 30000, MAX_FILE_CHARS = 20000;
   const ALLOWED_EXT = /\.(?:js|mjs|ts|tsx|jsx|html|css|kt|java|gradle|kts|xml|json|py|go|rs|swift|dart|yml|yaml|md|c|cc|cpp|h|hpp|sh|properties|toml)$/i;
 
-  const ALLOWED_BASENAMES = new Set(["Dockerfile", "Makefile", "CMakeLists.txt", "gradlew", "Procfile", "LICENSE", "NOTICE", ".gitignore", ".dockerignore", "requirements.txt", "Gemfile", "Rakefile"]);
+  const ALLOWED_BASENAMES = new Set(["Dockerfile", "Makefile", "CMakeLists.txt", "gradlew", "Procfile", "LICENSE", "NOTICE", ".gitignore", ".dockerignore", "requirements.txt", "Gemfile", "Rakefile", "README.md", "CHANGELOG.md", ".editorconfig"]);
   function safePath(path, options = {}) {
     if (typeof path !== "string" || !path || path.length > 240) return false;
     if (path.startsWith("/") || path.includes("\\") || path.includes("\0")) return false;
@@ -54,7 +54,7 @@
       if (file.content.length > MAX_FILE_CHARS) return fail("A proposed file exceeds the per-file size limit.");
       total += file.content.length;
       if (total > MAX_TOTAL_CHARS) return fail("The proposed change exceeds the total size limit. No repository changes were made.");
-      const newInInspectedDirectory = !existing && directories.some(directory => file.path.startsWith(directory + "/"));
+      const newInInspectedDirectory = !existing && (directories.some(directory => file.path.startsWith(directory + "/")) || (!file.path.includes("/") && ALLOWED_BASENAMES.has(file.path)));
       if (!existing && !newInInspectedDirectory) return fail("The AI proposed a file outside the inspected source files and directories: " + file.path);
       files.push({ path: file.path, content: file.content, operation: "upsert" });
     }
