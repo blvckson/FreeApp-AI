@@ -915,10 +915,12 @@ function toDataUrl(file) {
   let lastPR = null, lastBranch = "", lastCommitSha = "", lastTask = "", lastChecks = null;
   try {
     const saved = JSON.parse(sessionStorage.getItem("freeapp_last_engineering_pr") || "null");
-    if (saved && Number.isInteger(saved.number)) {
+    if (saved && Number.isInteger(saved.number) && typeof saved.repo === "string") {
       lastPR = saved;
       lastBranch = saved.branch || "";
       lastCommitSha = saved.sha || "";
+      if (repoInput && !repoInput.value) repoInput.value = saved.repo;
+      lastTask = saved.task || "";
       checkActionButton.disabled = false;
       buildActionButton.disabled = false;
     }
@@ -989,11 +991,12 @@ function toDataUrl(file) {
     status.textContent = "Reading the latest pull request commit and checking all GitHub Actions runs…";
     try {
       const pr = await gh(token, "/repos/" + repo + "/pulls/" + lastPR.number);
+      await loadBuildWorkflows(token, repo, pr.base.ref);
       lastBranch = pr.head.ref;
       lastCommitSha = pr.head.sha;
       const checks = await monitorPullRequestChecks(token, repo, lastBranch, pr.number, lastCommitSha);
       lastChecks = checks;
-      lastPR = { number: pr.number, html_url: pr.html_url, branch: lastBranch, sha: lastCommitSha, merged: !!pr.merged_at };
+      lastPR = { repo, number: pr.number, html_url: pr.html_url, branch: lastBranch, sha: lastCommitSha, merged: !!pr.merged_at, task: lastTask };
       sessionStorage.setItem("freeapp_last_engineering_pr", JSON.stringify(lastPR));
       repairActionButton.disabled = checks.state !== "failure";
       result.textContent = "Pull request: " + pr.html_url + "\nBranch: " + lastBranch + "\nCommit: " + lastCommitSha +
@@ -1047,7 +1050,7 @@ function toDataUrl(file) {
     lastBranch = pr.head.ref;
     lastCommitSha = commitSha;
     lastTask = repairTask;
-    lastPR = { number: pr.number, html_url: pr.html_url, branch: lastBranch, sha: lastCommitSha, merged: false };
+    lastPR = { repo, number: pr.number, html_url: pr.html_url, branch: lastBranch, sha: lastCommitSha, merged: false, task: lastTask };
     sessionStorage.setItem("freeapp_last_engineering_pr", JSON.stringify(lastPR));
     status.textContent = "Repair committed. Monitoring the new checks…";
     lastChecks = await monitorPullRequestChecks(token, repo, lastBranch, pr.number, commitSha);
@@ -1190,7 +1193,7 @@ function toDataUrl(file) {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: "FreeApp AI: " + (proposal.summary || task).slice(0, 180), head: branch, base, body })
       });
-      lastPR = { number: pr.number, html_url: pr.html_url, branch, sha: commitSha, merged: false };
+      lastPR = { repo, number: pr.number, html_url: pr.html_url, branch, sha: commitSha, merged: false, task: lastTask };
       sessionStorage.setItem("freeapp_last_engineering_pr", JSON.stringify(lastPR));
       checkActionButton.disabled = false;
       buildActionButton.disabled = !workflowSelect?.value;
