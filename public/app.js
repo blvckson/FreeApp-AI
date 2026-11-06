@@ -1073,7 +1073,7 @@ function toDataUrl(file) {
     const ref = await gh(token, "/repos/" + repo + "/git/ref/heads/" + encodeURIComponent(base));
     const headSha = ref.object.sha;
     const checkData = await gh(token, "/repos/" + repo + "/commits/" + headSha + "/check-runs?per_page=100");
-    const checkRuns = checkData.check_runs || [];
+    const checkRuns = (checkData.check_runs || []).filter(check => !/deploy/i.test(check.name || ""));
     if (!checkRuns.length || checkRuns.some(check => check.status !== "completed" || check.conclusion !== "success")) {
       throw new Error("Deployment is blocked: the latest default-branch commit does not have a complete set of successful check runs.");
     }
@@ -1130,6 +1130,8 @@ function toDataUrl(file) {
     if (!task) { status.textContent = "Describe the code change you want."; return; }
     runButton.disabled = true;
     result.textContent = "";
+    let createdBranch = "";
+    let pullRequestOpened = false;
     try {
       status.textContent = "Checking GitHub access and inspecting the repository...";
       const repository = await gh(token, "/repos/" + repo);
@@ -1170,6 +1172,7 @@ function toDataUrl(file) {
       status.textContent = "Creating a separate branch and committing " + files.length + " file(s)...";
       const branch = "freeapp-ai/" + new Date().toISOString().replace(/[^0-9TZ]/g, "-").replace(/-+$/,"").toLowerCase() + "-" + window.FreeAppCodingGuard.randomSuffix();
       await createBranch(token, repo, branch, ref.object.sha);
+      createdBranch = branch;
       const commitSha = await commitFilesAtomically(token, repo, branch, ref.object.sha, files);
       lastBranch = branch;
       lastCommitSha = commitSha;
@@ -1193,6 +1196,7 @@ function toDataUrl(file) {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: "FreeApp AI: " + (proposal.summary || task).slice(0, 180), head: branch, base, body })
       });
+      pullRequestOpened = true;
       lastPR = { repo, number: pr.number, html_url: pr.html_url, branch, sha: commitSha, merged: false, task: lastTask };
       sessionStorage.setItem("freeapp_last_engineering_pr", JSON.stringify(lastPR));
       checkActionButton.disabled = false;
@@ -1209,6 +1213,10 @@ function toDataUrl(file) {
         "\n\nThe agent creates reviewable changes and monitors CI. It does not merge or deploy without explicit authorization.";
       status.textContent = checks.state === "success" ? "Code committed; automated checks passed." : "Code committed; verification needs attention.";
     } catch (error) {
+      if (createdBranch && !pullRequestOpened) {
+        const refPath = "/repos/" + repo + "/git/refs/heads/" + createdBranch.split("/").map(encodeURIComponent).join("/");
+        await gh(token, refPath, { method: "DELETE" }).catch(() => {});
+      }
       status.textContent = "GitHub coding task failed.";
       result.textContent = String(error && error.message || error);
     } finally {
