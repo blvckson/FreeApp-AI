@@ -1,0 +1,47 @@
+name: Engineering CI
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Check Worker syntax
+        run: node --check worker.js
+      - name: Check browser scripts
+        run: npm run check:js
+      - name: Run regression tests
+        run: npm test
+      - name: Set up Java for optional Android build
+        if: hashFiles('gradlew') != ''
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Build Android debug APK when Gradle wrapper is present
+        if: hashFiles('gradlew') != ''
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleDebug --no-daemon
+      - name: Upload debug APK when built
+        if: success() && hashFiles('app/build/outputs/apk/debug/*.apk') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: freeapp-ai-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: ignore
