@@ -1218,13 +1218,13 @@ function targetedEngineeringFallbackNeeded(prompt, response) {
   const request = String(prompt || '').toLowerCase();
   const answer = String(response || '');
   if (/stable_topological_sort/.test(request)) {
-    return !/def\\s+stable_topological_sort\\s*\\(/i.test(answer)
-      || !/edge\\[0\\].*(?:not in|unknown)/i.test(answer)
-      || !/edge\\[1\\].*(?:not in|unknown)/i.test(answer)
+    return !/def\s+stable_topological_sort\s*\(/i.test(answer)
+      || !/edge\[0\].*(?:not in|unknown)/i.test(answer)
+      || !/edge\[1\].*(?:not in|unknown)/i.test(answer)
       || !/heapq/i.test(answer)
       || !/cycle/i.test(answer)
-      || (answer.match(/def\\s+test_/g) || []).length < 4
-      || !/O\\s*\\(/i.test(answer);
+      || (answer.match(/def\s+test_/g) || []).length < 4
+      || !/O\s*\(/i.test(answer);
   }
   if (/task pocket|task manager|task list|to-do list/.test(request) && /localstorage/.test(request) && /delete/.test(request)) {
     return !/<!doctype html/i.test(answer)
@@ -1232,7 +1232,7 @@ function targetedEngineeringFallbackNeeded(prompt, response) {
       || !/addEventListener/i.test(answer)
       || !/completed/i.test(answer)
       || !/filter/i.test(answer)
-      || !/(?:aria-label|<label\\b)/i.test(answer);
+      || !/(?:aria-label|<label\b)/i.test(answer);
   }
   return false;
 }
