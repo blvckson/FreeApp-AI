@@ -74,7 +74,7 @@ jobs:
               try:
                   with urllib.request.urlopen(request, timeout=80) as response:
                       body = json.loads(response.read().decode())
-                      answer = str(body.get("result") or body.get("answer") or "")
+                      answer = str(body.get("imageAnalysis") or body.get("result") or body.get("answer") or "")
                       normalized = re.sub(r"[^A-Z0-9]", "", answer.upper())
                       checks = {token: token in normalized for token in expected}
                       results.append({

@@ -36,6 +36,7 @@ test("OCR marks unavailable text extraction honestly and never invents a transcr
   } } };
   const result = await analyzeImages(env, [image], "Read faint text");
   assert.match(result, /Dedicated text extraction was unavailable/);
+  assert.match(result, /Diagnostic: model unavailable/);
   assert.match(result, /Verify uncertain text/);
   assert.doesNotMatch(result, /The text says .*\d{3,}/);
 });

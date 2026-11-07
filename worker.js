@@ -541,6 +541,7 @@ For substantial application requests, deliver implementation, not generic advice
 
         return json({
           result: responseText || "The AI returned no text.",
+          imageAnalysis: imageContext,
           media: buildMedia(prompt, sources),
           researched: sources.length > 0,
           researchAttempted: true,
@@ -770,7 +771,7 @@ async function analyzeImages(env, images, prompt) {
       if (!answer) throw new Error("OCR model returned an empty transcription.");
       extracted.push("IMAGE " + (index + 1) + " OCR:\n" + answer);
     } catch (error) {
-      ocrFailure = String(error?.message || error);
+      ocrFailure = String(error?.message || error).replace(/bearer\s+[^\s,;]+/gi, "Bearer [redacted]").replace(/(?:api[_-]?key|token)\s*[:=]\s*[^\s,;]+/gi, "credential=[redacted]").slice(0, 240);
       extracted.push("IMAGE " + (index + 1) + " OCR: Dedicated text extraction was unavailable; do not assume unreadable text.");
     }
   }
@@ -797,7 +798,7 @@ async function analyzeImages(env, images, prompt) {
   const sections = [];
   if (extracted.length) sections.push("IMAGE TEXT EXTRACTION (OCR):\n" + extracted.join("\n\n"));
   if (visual) sections.push("ADDITIONAL IMAGE ANALYSIS:\n" + visual);
-  if (ocrFailure) sections.push("OCR STATUS: One or more images could not be processed by the dedicated OCR model. Verify uncertain text against the original image.");
+  if (ocrFailure) sections.push("OCR STATUS: One or more images could not be processed by the dedicated OCR model. Verify uncertain text against the original image. Diagnostic: " + ocrFailure);
   return sections.length
     ? sections.join("\n\n")
     : "IMAGE INPUT: Image was attached, but text extraction and visual analysis were unavailable.";
