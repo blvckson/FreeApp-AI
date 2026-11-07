@@ -1,0 +1,117 @@
+name: OCR Accuracy Benchmark
+
+on:
+  workflow_run:
+    workflows: ["Deploy FreeApp AI"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  ocr-benchmark:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install image fixture dependency
+        run: python -m pip install --disable-pip-version-check pillow
+      - name: Generate synthetic OCR fixtures and test the deployed endpoint
+        env:
+          API_BASE: https://freeapp-ai.lovesongmelodies.workers.dev
+        run: |
+          python <<'PY'
+          from PIL import Image, ImageDraw, ImageFont, ImageFilter
+          import base64, json, os, re, time, urllib.request
+          from pathlib import Path
+
+          expected = ["QX48291", "MARAKATO", "UGX184750"]
+          text_lines = ["INVOICE NO: QX-48291", "CUSTOMER: MARA KATO", "TOTAL DUE: UGX 184,750"]
+          font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+          font = ImageFont.truetype(font_path, 58)
+          out = Path("ocr-fixtures")
+          out.mkdir(exist_ok=True)
+
+          def make_image(name, fill=(20,20,20), blur=0):
+              image = Image.new("RGB", (1500, 460), "white")
+              draw = ImageDraw.Draw(image)
+              for index, line in enumerate(text_lines):
+                  draw.text((70, 45 + index * 130), line, font=font, fill=fill)
+              if blur:
+                  image = image.filter(ImageFilter.GaussianBlur(blur))
+              if name == "rotated":
+                  image = image.rotate(90, expand=True)
+              path = out / (name + ".png")
+              image.save(path)
+              return path
+
+          fixtures = [
+              ("clear", make_image("clear")),
+              ("faint", make_image("faint", fill=(175,175,175), blur=0.5)),
+              ("rotated", make_image("rotated")),
+              ("blurred", make_image("blurred", blur=1.6)),
+          ]
+          base = os.environ["API_BASE"].rstrip("/")
+          results = []
+          for name, path in fixtures:
+              data_url = "data:image/png;base64," + base64.b64encode(path.read_bytes()).decode()
+              payload = json.dumps({
+                  "prompt": "Use OCR to read every line in this document exactly. Do not guess unclear characters.",
+                  "images": [data_url]
+              }).encode()
+              request = urllib.request.Request(
+                  base + "/api/generate",
+                  data=payload,
+                  headers={"Content-Type":"application/json"},
+                  method="POST"
+              )
+              started = time.time()
+              try:
+                  with urllib.request.urlopen(request, timeout=80) as response:
+                      body = json.loads(response.read().decode())
+                      answer = str(body.get("result") or body.get("answer") or "")
+                      normalized = re.sub(r"[^A-Z0-9]", "", answer.upper())
+                      checks = {token: token in normalized for token in expected}
+                      results.append({
+                          "fixture": name, "http_status": response.status,
+                          "latency_ms": round((time.time()-started)*1000),
+                          "checks": checks, "score": round(100*sum(checks.values())/len(expected)),
+                          "answer_excerpt": answer[:2500]
+                      })
+              except Exception as error:
+                  results.append({
+                      "fixture": name, "http_status": None,
+                      "latency_ms": round((time.time()-started)*1000),
+                      "checks": {token: False for token in expected},
+                      "score": 0, "error": str(error)
+                  })
+
+          passed = sum(sum(row["checks"].values()) for row in results)
+          total = len(results) * len(expected)
+          report = {
+              "benchmark": "Deployed OCR synthetic-document benchmark",
+              "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+              "endpoint": base + "/api/generate",
+              "method": "Four generated fixtures: clean print, faint print, 90-degree rotation and blur. This is a synthetic benchmark, not a real-user-document accuracy guarantee.",
+              "overall_percent": round(100*passed/total),
+              "passed_fields": passed, "total_fields": total,
+              "results": results
+          }
+          Path("ocr-benchmark-results.json").write_text(json.dumps(report, indent=2))
+          print(json.dumps(report, indent=2))
+          if report["overall_percent"] < 100:
+              raise SystemExit("OCR quality gate failed: not all synthetic document fields were read exactly.")
+          PY
+      - name: Upload OCR benchmark report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FreeApp-AI-OCR-benchmark
+          path: ocr-benchmark-results.json
+          if-no-files-found: warn
+          retention-days: 30

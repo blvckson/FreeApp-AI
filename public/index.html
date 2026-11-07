@@ -57,14 +57,21 @@
       <input id="github-repo" type="text" placeholder="your-account/your-repository" autocomplete="off">
       <label for="github-token">GitHub access token</label>
       <input id="github-token" type="password" placeholder="Paste a fine-grained token for this repository" autocomplete="off">
-      <p class="small">Use a fine-grained token limited to the chosen repository with Contents: Read and write, Pull requests: Read and write, and Actions: Read (to inspect build/check results). The token is sent directly from this screen to GitHub over HTTPS; it is not sent to the AI inference endpoint and is not saved by this page. Clear it when finished. Never paste a password or token into the normal AI chat.</p>
+      <p class="small">Use a fine-grained token limited to this repository with Contents: Read and write, Pull requests: Read and write, and Actions: Read and write (to run builds and inspect checks). The token is sent directly to GitHub over HTTPS; it is never sent to the AI model or saved by this page. Clear it when finished. Never paste a password or token into the normal AI chat.</p>
       <label for="github-coding-task">What should FreeApp AI code?</label>
       <textarea id="github-coding-task" rows="5" placeholder="Example: Fix the login crash, add tests, and preserve all existing features."></textarea>
       <div class="controls">
         <button id="github-coding-run" type="button">Code Repository & Open Pull Request</button>
         <button id="github-coding-clear" class="secondary-button" type="button">Clear Token</button>
       </div>
-      <div id="github-coding-status" class="status" aria-live="polite">No repository changes are made until you run a coding task. Changes are committed to a new branch and submitted as a pull request—not directly to the default branch. The agent does not merge, deploy, or publish releases. Build/test results are reported only when GitHub Actions returns evidence.</div>
+      <div class="controls">
+        <select id="github-coding-workflow" aria-label="Build or test workflow"><option value="">Choose build/test workflow</option></select>
+        <button id="github-coding-build" type="button" disabled>Build / Test PR Branch</button>
+        <button id="github-coding-check" class="secondary-button" type="button" disabled>Check PR & Debug</button>
+        <button id="github-coding-repair" class="secondary-button" type="button" disabled>Repair Failed Checks</button>
+        <button id="github-coding-deploy" class="secondary-button" type="button">Deploy Verified Main</button>
+      </div>
+      <div id="github-coding-status" class="status" aria-live="polite">No repository changes are made until you run a coding task. Changes are committed to a new branch and submitted as a pull request—not directly to the default branch. The agent never auto-merges. It can dispatch a selected build workflow on the PR branch, inspect CI failures, propose a repair commit, and deploy main only after a merged PR and successful checks plus explicit confirmation.</div>
       <div id="github-coding-result" class="website-result" aria-live="polite"></div>
     </section>
     <section class="card phone-control-card">
