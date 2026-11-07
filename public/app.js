@@ -86,7 +86,7 @@ window.FreeAppNarratorStatus = function(message) { if (narratorStatus) narratorS
 
 if (functionMenu && functionMenuContent) {
   const moveIntoMenu = (element) => { if (element) functionMenuContent.appendChild(element); };
-  moveIntoMenu(imageInput && imageInput.closest(".controls"));
+  
   moveIntoMenu(clearConversationButton);
   moveIntoMenu(conversationNote);
   moveIntoMenu(document.querySelector(".website-card"));
@@ -119,6 +119,9 @@ if (narratorClose && narratorModal) {
 }
 
 const API_BASE = "https://freeapp-ai.lovesongmelodies.workers.dev";
+
+const attachButton = document.getElementById("attach-button");
+if (attachButton) attachButton.addEventListener("click", () => imageInput.click());
 
 imageInput.addEventListener("change", () => {
   selectedImages = Array.from(imageInput.files || []).slice(0, 4);
