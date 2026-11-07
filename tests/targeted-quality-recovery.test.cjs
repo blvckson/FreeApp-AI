@@ -65,6 +65,7 @@ test("Android research has three direct official-source fallbacks", () => {
   assert.match(worker, /fallbackResearchCandidates\(query/);
   assert.match(worker, /const isAndroidResearchQuery =/);
   assert.match(worker, /isCloudflareQuery \|\| isAndroidResearchQuery/);
+  assert.ok(worker.includes("developer\\.android\\.com|developers\\.cloudflare\\.com"), "official Android and Cloudflare docs must receive primary-source classification");
 });
 
 test("recovery is scoped and does not change reasoning or debugging classifiers", () => {
