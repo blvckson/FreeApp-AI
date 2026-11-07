@@ -46,7 +46,8 @@ test("generic task-manager fallback labels every input and button and preserves 
   assert.ok(buttons.length >= 4);
   assert.ok(buttons.every(match => /aria-label\s*=/.test(match[1])), "every button must have an accessible name");
   const inputs = [...answer.matchAll(/<input\b([^>]*)>/gi)];
-  assert.ok(inputs.length >= 2);
+  assert.ok(inputs.length >= 1);
+  assert.match(answer, /setAttribute\(\x27aria-label\x27,\x27Mark /, "dynamically created completion checkbox must be labelled");
   assert.ok(inputs.every(match => /aria-label\s*=/.test(match[1]) || /id\s*=/.test(match[1])), "every input must have an accessible name");
   assert.equal(targetedEngineeringFallbackNeeded(htmlPrompt, answer), false);
 });
