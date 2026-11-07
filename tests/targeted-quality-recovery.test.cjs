@@ -32,17 +32,17 @@ test("stable_topological_sort fallback validates both endpoints and uses a stabl
 test("fetchActiveUsers coding fallback restores concurrency, ordering, rejection handling and runnable tests", () => {
   const answer = buildEngineeringFallback(jsPrompt);
   assert.match(answer, /async function fetchActiveUsers/);
-  assert.match(answer, /Promise\\.all/);
-  assert.match(answer, /user\\.active === true/);
-  assert.match(answer, /catch \\(cause\\)/);
-  assert.match(answer, /assert\\.deepEqual/);
-  assert.match(answer, /assert\\.rejects/);
+  assert.match(answer, /Promise\.all/);
+  assert.match(answer, /user\.active === true/);
+  assert.match(answer, /catch \(cause\)/);
+  assert.match(answer, /assert\.deepEqual/);
+  assert.match(answer, /assert\.rejects/);
   assert.equal(targetedEngineeringFallbackNeeded(jsPrompt, answer), false);
   assert.equal(targetedEngineeringFallbackNeeded(jsPrompt, "async function fetchActiveUsers(ids, fetchUser) { return ids.map(async id => fetchUser(id)).filter(user => user.active); }"), true);
 });
 
 test("topological-sort guard accepts explicit tuple-unpacked source and target validation", () => {
-  const valid = `def stable_topological_sort(nodes, edges):
+  const valid = \`def stable_topological_sort(nodes, edges):
     node_set = set(nodes)
     for source, target in edges:
         if source not in node_set: raise ValueError("unknown source")
@@ -53,7 +53,7 @@ test("topological-sort guard accepts explicit tuple-unpacked source and target v
     def test_two(): pass
     def test_three(): pass
     def test_four(): pass
-    return "O(V + E)"`;
+    return "O(V + E)"\`;
   assert.equal(targetedEngineeringFallbackNeeded(pythonPrompt, valid), false);
 });
 
