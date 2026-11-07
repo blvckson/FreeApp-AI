@@ -1233,12 +1233,20 @@ function targetedEngineeringFallbackNeeded(prompt, response) {
       || !/O\s*\(/i.test(answer);
   }
   if (/task pocket|task manager|task list|to-do list/.test(request) && /localstorage/.test(request) && /delete/.test(request)) {
+    const buttons = answer.match(/<button\\b[^>]*>/gi) || [];
+    const inputs = answer.match(/<input\\b[^>]*>/gi) || [];
+    const everyButtonNamed = buttons.length > 0 && buttons.every(tag => /aria-label\\s*=|aria-labelledby\\s*=/.test(tag));
+    const everyInputNamed = inputs.length > 0 && inputs.every(tag =>
+      /aria-label\\s*=|aria-labelledby\\s*=/.test(tag) ||
+      (/\\bid\\s*=\\s*[\"'][^\"']+[\"']/i.test(tag) && /<label\\b[^>]*for\\s*=/i.test(answer))
+    ) && (!/createElement\\([\"']input[\"']\\)/i.test(answer) || /setAttribute\\([\"']aria-label[\"']/i.test(answer));
     return !/<!doctype html/i.test(answer)
       || !/localStorage/i.test(answer)
       || !/addEventListener/i.test(answer)
       || !/completed/i.test(answer)
       || !/filter/i.test(answer)
-      || !/(?:aria-label|<label\b)/i.test(answer);
+      || !everyButtonNamed
+      || !everyInputNamed;
   }
   return false;
 }
