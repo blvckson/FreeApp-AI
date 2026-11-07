@@ -16,6 +16,7 @@ const classifierEnd = worker.indexOf("function isResearchFirstRequest(prompt) {"
 const isSoftwareEngineeringRequest = vm.runInNewContext("(" + worker.slice(classifierStart, classifierEnd).trim() + ")");
 
 const pythonPrompt = "Write a complete Python function stable_topological_sort(nodes, edges) that preserves input order for ties, validates BOTH source and target of every edge against nodes, detects cycles with ValueError, uses an efficient queue/priority structure rather than repeated list pop(0), and includes at least four runnable unit tests. Explain complexity.";
+const jsPrompt = "Write a robust JavaScript async function fetchActiveUsers(ids, fetchUser) that fetches all users concurrently, preserves order, filters active users, handles a rejected fetch explicitly, and includes at least three tests.";
 const htmlPrompt = "Create a complete runnable single-file HTML task manager with add, complete, delete, All/Active/Completed filters, localStorage persistence, an explicit <label for> or aria-label for EVERY input and button, and an empty state. It must have no external script or stylesheet dependencies.";
 
 test("stable_topological_sort fallback validates both endpoints and uses a stable heap", () => {
@@ -26,6 +27,34 @@ test("stable_topological_sort fallback validates both endpoints and uses a stabl
   assert.ok((answer.match(/def test_/g) || []).length >= 4);
   assert.equal(targetedEngineeringFallbackNeeded(pythonPrompt, answer), false);
   assert.equal(targetedEngineeringFallbackNeeded(pythonPrompt, "def stable_topological_sort(nodes, edges): pass"), true);
+});
+
+test("fetchActiveUsers coding fallback restores concurrency, ordering, rejection handling and runnable tests", () => {
+  const answer = buildEngineeringFallback(jsPrompt);
+  assert.match(answer, /async function fetchActiveUsers/);
+  assert.match(answer, /Promise\\.all/);
+  assert.match(answer, /user\\.active === true/);
+  assert.match(answer, /catch \\(cause\\)/);
+  assert.match(answer, /assert\\.deepEqual/);
+  assert.match(answer, /assert\\.rejects/);
+  assert.equal(targetedEngineeringFallbackNeeded(jsPrompt, answer), false);
+  assert.equal(targetedEngineeringFallbackNeeded(jsPrompt, "async function fetchActiveUsers(ids, fetchUser) { return ids.map(async id => fetchUser(id)).filter(user => user.active); }"), true);
+});
+
+test("topological-sort guard accepts explicit tuple-unpacked source and target validation", () => {
+  const valid = `def stable_topological_sort(nodes, edges):
+    node_set = set(nodes)
+    for source, target in edges:
+        if source not in node_set: raise ValueError("unknown source")
+        if target not in node_set: raise ValueError("unknown target")
+    heapq.heapify([])
+    if cycle: raise ValueError("cycle")
+    def test_one(): pass
+    def test_two(): pass
+    def test_three(): pass
+    def test_four(): pass
+    return "O(V + E)"`;
+  assert.equal(targetedEngineeringFallbackNeeded(pythonPrompt, valid), false);
 });
 
 test("generated Python implementation and five unit tests execute successfully", () => {
