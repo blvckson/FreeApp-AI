@@ -5,7 +5,7 @@ const path = require("node:path");
 const vm = require("node:vm");
 
 const source = fs.readFileSync(path.join(__dirname, "..", "worker.js"), "utf8");
-const start = source.indexOf("async function analyzeImages(env, images, prompt) {");
+const start = source.indexOf("async function analyzeImages(env, images, prompt, localOcrText = \"\") {");
 const end = source.indexOf("\nfunction buildMedia(", start);
 assert.ok(start >= 0 && end > start, "analyzeImages must exist");
 const analyzeImages = vm.runInNewContext("(" + source.slice(start, end).replace(/^async function analyzeImages/, "async function") + ")");
@@ -51,6 +51,27 @@ test("OCR handles multiple images and rejects non-image payloads", async () => {
   assert.equal(count, 2);
   assert.match(result, /IMAGE 1 OCR/);
   assert.match(result, /IMAGE 2 OCR/);
+});
+
+test("local device OCR bypasses the quota-limited hosted OCR model", async () => {
+  const calls = [];
+  const env = { AI: { run: async (model) => {
+    calls.push(model);
+    if (model.includes("moondream")) throw new Error("hosted OCR should not run");
+    return { response: "A document photograph." };
+  } } };
+  const transcript = "IMAGE 1 (92% confidence):\\nINVOICE 1042\\nTOTAL: $19.50";
+  const result = await analyzeImages(env, [image], "Read this invoice", transcript);
+  assert.match(result, /LOCAL DEVICE OCR TRANSCRIPT/);
+  assert.match(result, /INVOICE 1042/);
+  assert.match(result, /92% confidence/);
+  assert.equal(calls.length, 0, "local OCR must not call hosted vision models");
+});
+
+test("local OCR remains usable when the hosted AI binding is unavailable", async () => {
+  const result = await analyzeImages({}, [image], "Read this invoice", "INVOICE 1042");
+  assert.match(result, /INVOICE 1042/);
+  assert.match(result, /LOCAL DEVICE OCR TRANSCRIPT/);
 });
 
 test("OCR reports unavailable image analysis without throwing when AI binding is absent", async () => {

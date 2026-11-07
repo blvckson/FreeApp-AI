@@ -308,8 +308,9 @@ export default {
       // and Pollinations), so it must be allowed to try every available route.
 
       try {
+        const ocrText = typeof body.ocrText === "string" ? body.ocrText.trim().slice(0, 12000) : "";
         const imageContext = await withTimeout(
-          analyzeImages(env, images, prompt),
+          analyzeImages(env, images, prompt, ocrText),
           8000,
           "IMAGE INPUT: Image analysis timed out; answering from the text prompt."
         );
@@ -740,39 +741,44 @@ ${JSON.stringify(executed).slice(0, 3000)}
   }
 };
 
-async function analyzeImages(env, images, prompt) {
+async function analyzeImages(env, images, prompt, localOcrText = "") {
   if (!images.length) return "IMAGE INPUT: No image was attached.";
-  if (!env.AI) return "IMAGE INPUT: Image analysis is unavailable.";
+  if (!env.AI && !String(localOcrText || "").trim()) return "IMAGE INPUT: Image analysis is unavailable.";
 
   const validImages = images.filter(value =>
     typeof value === "string" && /^data:image\/(?:png|jpeg|jpg|webp|gif);base64,/i.test(value)
   );
   if (!validImages.length) return "IMAGE INPUT: No supported image data was received.";
 
-  // Run a dedicated OCR-capable vision model first. Moondream supports OCR,
-  // document reading and structured visual understanding on Workers AI.
+  // Prefer on-device OCR supplied by the app. It does not consume hosted AI quota.
+  // Keep the hosted OCR model only as a fallback for clients without local OCR.
   const extracted = [];
   let ocrFailure = null;
-  for (let index = 0; index < validImages.length; index++) {
-    try {
-      const result = await env.AI.run("@cf/moondream/moondream3.1-9B-A2B", {
-        task: "query",
-        image: validImages[index],
-        question: [
-          "Perform careful OCR on this image.",
-          "Transcribe all visible text exactly, preserving paragraphs, line breaks, headings, labels, numbers, punctuation and table row/column relationships where possible.",
-          "Do not correct spelling, infer missing characters, invent cropped content, or silently normalize numbers.",
-          "For text that cannot be read confidently, write [illegible] at that exact location.",
-          "If the image is rotated or contains faint, small or blurred text, inspect it carefully and state which portions remain uncertain.",
-          "Return only the transcription and a short note about unreadable areas."
-        ].join(" ")
-      });
-      const answer = String(result?.answer || result?.response || "").trim();
-      if (!answer) throw new Error("OCR model returned an empty transcription.");
-      extracted.push("IMAGE " + (index + 1) + " OCR:\n" + answer);
-    } catch (error) {
-      ocrFailure = String(error?.message || error).replace(/bearer\s+[^\s,;]+/gi, "Bearer [redacted]").replace(/(?:api[_-]?key|token)\s*[:=]\s*[^\s,;]+/gi, "credential=[redacted]").slice(0, 240);
-      extracted.push("IMAGE " + (index + 1) + " OCR: Dedicated text extraction was unavailable; do not assume unreadable text.");
+  const localText = String(localOcrText || "").trim().slice(0, 12000);
+  if (localText) {
+    extracted.push("LOCAL DEVICE OCR TRANSCRIPT:\n" + localText);
+  } else if (env.AI) {
+    for (let index = 0; index < validImages.length; index++) {
+      try {
+        const result = await env.AI.run("@cf/moondream/moondream3.1-9B-A2B", {
+          task: "query",
+          image: validImages[index],
+          question: [
+            "Perform careful OCR on this image.",
+            "Transcribe all visible text exactly, preserving paragraphs, line breaks, headings, labels, numbers, punctuation and table row/column relationships where possible.",
+            "Do not correct spelling, infer missing characters, invent cropped content, or silently normalize numbers.",
+            "For text that cannot be read confidently, write [illegible] at that exact location.",
+            "If the image is rotated or contains faint, small or blurred text, inspect it carefully and state which portions remain uncertain.",
+            "Return only the transcription and a short note about unreadable areas."
+          ].join(" ")
+        });
+        const answer = String(result?.answer || result?.response || "").trim();
+        if (!answer) throw new Error("OCR model returned an empty transcription.");
+        extracted.push("IMAGE " + (index + 1) + " OCR:\n" + answer);
+      } catch (error) {
+        ocrFailure = String(error?.message || error).replace(/bearer\s+[^\s,;]+/gi, "Bearer [redacted]").replace(/(?:api[_-]?key|token)\s*[:=]\s*[^\s,;]+/gi, "credential=[redacted]").slice(0, 240);
+        extracted.push("IMAGE " + (index + 1) + " OCR: Dedicated text extraction was unavailable; do not assume unreadable text.");
+      }
     }
   }
 
@@ -784,15 +790,17 @@ async function analyzeImages(env, images, prompt) {
   for (const dataUrl of validImages) content.push({ type: "image_url", image_url: { url: dataUrl } });
 
   let visual = "";
-  try {
-    const result = await env.AI.run("@cf/meta/llama-4-scout-17b-16e-instruct", {
-      messages: [{ role: "user", content }],
-      max_tokens: 3072,
-      temperature: 0.1
-    });
-    visual = String(result?.response || "").trim();
-  } catch {
-    // OCR remains useful even if the complementary visual model is unavailable.
+  if (!localText && env.AI) {
+    try {
+      const result = await env.AI.run("@cf/meta/llama-4-scout-17b-16e-instruct", {
+        messages: [{ role: "user", content }],
+        max_tokens: 3072,
+        temperature: 0.1
+      });
+      visual = String(result?.response || "").trim();
+    } catch {
+      // Image-only analysis remains optional; local OCR text is returned independently.
+    }
   }
 
   const sections = [];
