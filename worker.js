@@ -1020,9 +1020,9 @@ function engineeringDeliverableGaps(prompt, response, buildMode = false) {
 
 function isSoftwareEngineeringRequest(prompt) {
   const text = String(prompt || "").toLowerCase();
-  const established = /\\b(build|create|develop|implement|code|program|debug|fix|refactor|commit|deploy|compile|apk|repository|github|workflow|pull request|software|app|application|api|backend|frontend|database|test suite)\\b/i.test(text);
-  const implementationArtifact = /\\b(python|javascript|typescript|java|kotlin|sql|algorithm|function|class|script|source code)\\b/i.test(text);
-  const implementationVerb = /\\b(write|create|develop|implement|generate|build|debug|fix|refactor|code|program)\\b/i.test(text);
+  const established = /\b(build|create|develop|implement|code|program|debug|fix|refactor|commit|deploy|compile|apk|repository|github|workflow|pull request|software|app|application|api|backend|frontend|database|test suite)\b/i.test(text);
+  const implementationArtifact = /\b(python|javascript|typescript|java|kotlin|sql|algorithm|function|class|script|source code)\b/i.test(text);
+  const implementationVerb = /\b(write|create|develop|implement|generate|build|debug|fix|refactor|code|program)\b/i.test(text);
   return established || (implementationArtifact && implementationVerb);
 }
 
