@@ -67,7 +67,7 @@ jobs:
               request = urllib.request.Request(
                   base + "/api/generate",
                   data=payload,
-                  headers={"Content-Type":"application/json"},
+                  headers={"Content-Type":"application/json", "Accept":"application/json", "User-Agent":"Mozilla/5.0 (compatible; FreeApp-AI-OCR-Benchmark/1.0)"},
                   method="POST"
               )
               started = time.time()
