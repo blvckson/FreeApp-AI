@@ -1140,15 +1140,15 @@ function buildEngineeringFallback(prompt) {
       "        self.assertEqual(stable_topological_sort(['a', 'b', 'c', 'd'], [('a', 'd'), ('b', 'd')]), ['a', 'b', 'c', 'd'])",
       "",
       "    def test_rejects_unknown_source_endpoint(self):",
-      "        with self.assertRaisesRegex(ValueError, 'source endpoint'):":
+      "        with self.assertRaisesRegex(ValueError, 'source endpoint'):",
       "            stable_topological_sort(['a'], [('missing', 'a')])",
       "",
       "    def test_rejects_unknown_target_endpoint(self):",
-      "        with self.assertRaisesRegex(ValueError, 'target endpoint'):":
+      "        with self.assertRaisesRegex(ValueError, 'target endpoint'):",
       "            stable_topological_sort(['a'], [('a', 'missing')])",
       "",
       "    def test_detects_cycles(self):",
-      "        with self.assertRaisesRegex(ValueError, 'cycle'):":
+      "        with self.assertRaisesRegex(ValueError, 'cycle'):",
       "            stable_topological_sort(['a', 'b'], [('a', 'b'), ('b', 'a')])",
       "",
       "    def test_handles_empty_graph(self):",
