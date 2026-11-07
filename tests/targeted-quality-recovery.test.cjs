@@ -56,6 +56,8 @@ test("Android research has three direct official-source fallbacks", () => {
   assert.match(worker, /https:\/\/developer\.android\.com\/reference\/android\/media\/projection\/MediaProjectionManager/);
   assert.match(worker, /https:\/\/developer\.android\.com\/develop\/background-work\/services\/fgs\/service-types#media-projection/);
   assert.match(worker, /fallbackResearchCandidates\(query/);
+  assert.match(worker, /const isAndroidResearchQuery =/);
+  assert.match(worker, /isCloudflareQuery \|\| isAndroidResearchQuery/);
 });
 
 test("recovery is scoped and does not change reasoning or debugging classifiers", () => {
