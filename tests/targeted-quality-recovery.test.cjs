@@ -56,6 +56,8 @@ test("generic task-manager fallback labels every input and button and preserves 
   assert.match(answer, /setAttribute\(\x27aria-label\x27,\x27Mark /, "dynamically created completion checkbox must be labelled");
   assert.ok(inputs.every(match => /aria-label\s*=/.test(match[1]) || /id\s*=/.test(match[1])), "every input must have an accessible name");
   assert.equal(targetedEngineeringFallbackNeeded(htmlPrompt, answer), false);
+  const inaccessible = answer.replace(/aria-label="Show active tasks"/, "").replace(/aria-label="Delete [^"]+"/, "");
+  assert.equal(targetedEngineeringFallbackNeeded(htmlPrompt, inaccessible), true, "one unlabeled button must trigger deterministic repair");
 });
 
 test("Android research has three direct official-source fallbacks", () => {
