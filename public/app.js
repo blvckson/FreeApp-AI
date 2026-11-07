@@ -726,6 +726,7 @@ async function preprocessImageForOcr(file, rotation = 0) {
 async function extractLocalOcr(files) {
   if (!files?.length || !window.Tesseract?.createWorker) return "";
   let worker;
+  let ocrTimeout;
   try {
     worker = await window.Tesseract.createWorker("eng", 1, {
       logger: message => {
@@ -734,6 +735,7 @@ async function extractLocalOcr(files) {
         }
       }
     });
+    ocrTimeout = setTimeout(() => { if (worker) worker.terminate().catch(() => {}); }, 45000);
     const transcripts = [];
     for (let index = 0; index < files.length; index++) {
       const file = files[index];
@@ -758,6 +760,7 @@ async function extractLocalOcr(files) {
     console.warn("Local OCR unavailable:", error?.message || error);
     return "";
   } finally {
+    clearTimeout(ocrTimeout);
     if (worker) {
       try { await worker.terminate(); } catch (_) {}
     }
