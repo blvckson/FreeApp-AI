@@ -913,9 +913,9 @@ function buildIndependentEvidenceBrief(query, sources) {
       const hits = terms.filter(term => lower.includes(term)).length;
       return { sentence, hits };
     }).filter(x => x.hits > 0).sort((a,b) => b.hits-a.hits).slice(0,5);
-    const official = /(^|\\.)(gov|edu|ac\\.[a-z]{2}|who\\.int|un\\.org|europa\\.eu)$/i.test(host)
-      || /(^|\\.)[a-z0-9-]+\\.(gov|edu)$/i.test(host)
-      || /(^|\\.)(developer\\.android\\.com|developers\\.cloudflare\\.com|docs\\.github\\.com|docs\\.python\\.org|developer\\.mozilla\\.org|learn\\.microsoft\\.com|docs\\.oracle\\.com)$/i.test(host);
+    const official = /(^|\.)(gov|edu|ac\.[a-z]{2}|who\.int|un\.org|europa\.eu)$/i.test(host)
+      || /(^|\.)[a-z0-9-]+\.(gov|edu)$/i.test(host)
+      || /(^|\.)(developer\.android\.com|developers\.cloudflare\.com|docs\.github\.com|docs\.python\.org|developer\.mozilla\.org|learn\.microsoft\.com|docs\.oracle\.com)$/i.test(host);
     const academic = /doi\.org|pubmed|arxiv|nature\.com|science\.org|springer|wiley|cochrane/i.test(host);
     const score = scoreResearchItem(source, query, text) + (official ? 5 : 0) + (academic ? 4 : 0);
     ranked.push({ title: String(source.title || host).slice(0,180), url: url.href, host, score, official, academic, relevant });
@@ -1346,7 +1346,7 @@ function scoreResearchItem(item, query, body = "") {
     if (text.includes(term)) score += 1;
   }
   // Evidence-quality signals are heuristics, not guarantees.
-  if (/^https?:\\/\\/(developer\\.android\\.com|developers\\.cloudflare\\.com|docs\\.github\\.com|docs\\.python\\.org|developer\\.mozilla\\.org|learn\\.microsoft\\.com|docs\\.oracle\\.com)(\\/|$)/i.test(url)) score += 5;
+  if (/^https?:\/\/(developer\.android\.com|developers\.cloudflare\.com|docs\.github\.com|docs\.python\.org|developer\.mozilla\.org|learn\.microsoft\.com|docs\.oracle\.com)(\/|$)/i.test(url)) score += 5;
   if (/\.(gov|gov\.[a-z]{2}|edu|ac\.[a-z]{2})(\.|$)/i.test(url)) score += 5;
   if (/doi\.org\//i.test(url) || /\b(pubmed|europepmc|arxiv|nature|science|sciencedirect|springer|wiley|nejm|bmj|cochranelibrary)\./i.test(url)) score += 4;
   if (/\b(docs|documentation|standards|policy|research|journal|data|statistics)\./i.test(url)) score += 2;
