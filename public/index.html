@@ -26,7 +26,12 @@
           📷 Add screenshot/image
           <input id="image-input" type="file" accept="image/*" multiple hidden>
         </label>
+        <label class="file-button">
+          📎 Attach text/code files
+          <input id="attachment-input" type="file" accept=".txt,.md,.csv,.json,.xml,.html,.css,.js,.ts,.java,.kt,.py,.c,.cpp,.h,.gradle,.properties,text/plain,text/markdown,text/csv,application/json,application/xml" multiple hidden>
+        </label>
         <span id="file-status">No image selected</span>
+        <span id="attachment-status" class="small">No files attached</span>
       </div>
       <div id="preview"></div>
       <button id="build-button" type="button">Ask FreeApp AI</button>
@@ -89,7 +94,7 @@
     </section>
   </main>
 
-  <div id="builtin-narrator-modal" class="modal" hidden><div class="modal-card voice-modal-card" role="dialog" aria-modal="true"><button id="builtin-narrator-close" class="modal-close" type="button">×</button><h2>Built-in Narrator</h2><p>Uses the Android device Text-to-Speech engine. This is separate from Voice Clone Narrator.</p><div class="narrator-controls"><button id="builtin-speak-button" type="button">🔊 Read Latest Answer</button><button id="builtin-stop-button" type="button">⏹ Stop</button><label><input id="builtin-auto-button" type="checkbox"> Automatically read AI answers</label><p id="narrator-status" class="status" aria-live="polite">Ready to read the latest answer.</p></div></div></div>
+  <div id="builtin-narrator-modal" class="modal" hidden><div class="modal-card voice-modal-card" role="dialog" aria-modal="true"><button id="builtin-narrator-close" class="modal-close" type="button">×</button><h2>Built-in Narrator</h2><p>Uses the Android device Text-to-Speech engine. This is separate from Voice Clone Narrator.</p><div class="narrator-controls"><button id="builtin-speak-button" type="button">🔊 Read Latest Answer</button><button id="builtin-stop-button" type="button">⏹ Stop</button><label for="narrator-speed">Narrator speed: <strong id="narrator-speed-value">0.90×</strong></label><input id="narrator-speed" type="range" min="0.70" max="1.30" step="0.05" value="0.90"><label><input id="builtin-auto-button" type="checkbox"> Automatically read AI answers</label><p class="small">Default speed is slightly slower for comfortable listening. Adjust any time.</p><p id="narrator-status" class="status" aria-live="polite">Ready to read the latest answer.</p></div></div></div>
 
   <div id="narrator-modal" class="modal" hidden>
     <div class="modal-card voice-modal-card" role="dialog" aria-modal="true" aria-labelledby="narrator-title">
