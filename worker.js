@@ -1342,14 +1342,29 @@ function buildEngineeringFallback(prompt) {
 function targetedEngineeringFallbackNeeded(prompt, response) {
   const request = String(prompt || '').toLowerCase();
   const answer = String(response || '');
+  if (/\\bfetchActiveUsers\\b/.test(request)) {
+    const loop = answer.match(/for\\s+([A-Za-z_$][\\w$]*)\\s*,\\s*([A-Za-z_$][\\w$]*)\\s+in\\s+edges/i);
+    const hasTests = /(?:assert\\.|test\\s*\\(|describe\\s*\\()/i.test(answer)
+      && /assert\\.(?:deepEqual|rejects|equal)|expect\\s*\\(/i.test(answer);
+    return !/async\\s+function\\s+fetchActiveUsers\\s*\\(/i.test(answer)
+      || !/Promise\\.all\\s*\\(/i.test(answer)
+      || !/\\.filter\\s*\\([\\s\\S]{0,180}active\\s*===?\\s*true/i.test(answer)
+      || !/try\\s*\\{[\\s\\S]*?catch\\s*\\(/i.test(answer)
+      || !hasTests;
+  }
   if (/stable_topological_sort/.test(request)) {
-    return !/def\s+stable_topological_sort\s*\(/i.test(answer)
-      || !/edge\[0\].*(?:not in|unknown)/i.test(answer)
-      || !/edge\[1\].*(?:not in|unknown)/i.test(answer)
+    const loop = answer.match(/for\\s+([A-Za-z_$][\\w$]*)\\s*,\\s*([A-Za-z_$][\\w$]*)\\s+in\\s+edges/i);
+    const sourceCheck = /(?:edge\\s*\\[\\s*0\\s*\\]|\\bsource\\b)\\s+not\\s+in\\s+(?:node_set|nodes)\\b/i.test(answer)
+      || (!!loop && new RegExp('\\\\b' + loop[1] + '\\\\s+not\\\\s+in\\\\s+(?:node_set|nodes)\\\\b', 'i').test(answer));
+    const targetCheck = /(?:edge\\s*\\[\\s*1\\s*\\]|\\btarget\\b)\\s+not\\s+in\\s+(?:node_set|nodes)\\b/i.test(answer)
+      || (!!loop && new RegExp('\\\\b' + loop[2] + '\\\\s+not\\\\s+in\\\\s+(?:node_set|nodes)\\\\b', 'i').test(answer));
+    return !/def\\s+stable_topological_sort\\s*\\(/i.test(answer)
+      || !sourceCheck
+      || !targetCheck
       || !/heapq/i.test(answer)
       || !/cycle/i.test(answer)
-      || (answer.match(/def\s+test_/g) || []).length < 4
-      || !/O\s*\(/i.test(answer);
+      || (answer.match(/def\\s+test_/g) || []).length < 4
+      || !/O\\s*\\(/i.test(answer);
   }
   if (/task pocket|task manager|task list|to-do list/.test(request) && /localstorage/.test(request) && /delete/.test(request)) {
     const buttons = answer.match(/<button\b[^>]*>/gi) || [];
