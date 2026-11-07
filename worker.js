@@ -325,7 +325,7 @@ export default {
         const researchMode = isResearchFirstRequest(prompt);
         // Research requests that discuss software, models, APIs, or development
         // must not be mistaken for requests to implement software.
-        const codeTask = !researchMode && isSoftwareEngineeringRequest(prompt) && /\b(code|program|debug|fix|refactor|implement|algorithm|api|backend|frontend|database|test|compile|build|app|application|software|repository|github)\b/i.test(prompt);
+        const codeTask = !researchMode && isSoftwareEngineeringRequest(prompt) && /\b(code|program|debug|fix|refactor|implement|algorithm|api|backend|frontend|database|test|compile|build|app|application|software|repository|github|function|class|script|source code|python|javascript|typescript|java|kotlin|sql)\b/i.test(prompt);
         const complexity = assessRequestComplexity(prompt, history, sources.length, images.length);
         const responseDepthGuidance = buildMode || codeTask
           ? "RESPONSE SIZE: Full deliverable. Include all requested implementation details, code, tests, validation, and run/build steps. Be readable and avoid repetition; do not omit required material to make the answer shorter."
@@ -1020,7 +1020,7 @@ function engineeringDeliverableGaps(prompt, response, buildMode = false) {
 
 function isSoftwareEngineeringRequest(prompt) {
   const text = String(prompt || "").toLowerCase();
-  return /\b(build|create|develop|implement|code|program|debug|fix|refactor|commit|deploy|compile|apk|repository|github|workflow|pull request|software|app|application|api|backend|frontend|database|test suite)\b/i.test(text);
+  return /\b(build|create|develop|implement|code|program|debug|fix|refactor|commit|deploy|compile|apk|repository|github|workflow|pull request|software|app|application|api|backend|frontend|database|test suite|python|javascript|typescript|java|kotlin|sql|algorithm)\b/i.test(text);
 }
 
 function isResearchFirstRequest(prompt) {
