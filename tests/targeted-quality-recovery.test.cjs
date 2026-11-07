@@ -11,6 +11,9 @@ const researchStart = worker.indexOf("function buildResearchOnlyFallback(prompt,
 assert.ok(fallbackStart >= 0 && gateStart > fallbackStart && researchStart > gateStart);
 const buildEngineeringFallback = vm.runInNewContext("(" + worker.slice(fallbackStart, gateStart).trim() + ")");
 const targetedEngineeringFallbackNeeded = vm.runInNewContext("(" + worker.slice(gateStart, researchStart).trim() + ")");
+const classifierStart = worker.indexOf("function isSoftwareEngineeringRequest(prompt) {");
+const classifierEnd = worker.indexOf("function isResearchFirstRequest(prompt) {", classifierStart);
+const isSoftwareEngineeringRequest = vm.runInNewContext("(" + worker.slice(classifierStart, classifierEnd).trim() + ")");
 
 const pythonPrompt = "Write a complete Python function stable_topological_sort(nodes, edges) that preserves input order for ties, validates BOTH source and target of every edge against nodes, detects cycles with ValueError, uses an efficient queue/priority structure rather than repeated list pop(0), and includes at least four runnable unit tests. Explain complexity.";
 const htmlPrompt = "Create a complete runnable single-file HTML task manager with add, complete, delete, All/Active/Completed filters, localStorage persistence, an explicit <label for> or aria-label for EVERY input and button, and an empty state. It must have no external script or stylesheet dependencies.";
@@ -70,4 +73,11 @@ test("recovery is scoped and does not change reasoning or debugging classifiers"
   assert.match(worker, /function buildEngineeringFallback\(prompt\)/);
   assert.equal(buildEngineeringFallback("Write Python code for an unrelated parser."), "");
   assert.equal(buildEngineeringFallback("Build an unrelated compiler."), "");
+});
+
+test("Python and JavaScript function requests enter the software-engineering path", () => {
+  assert.equal(isSoftwareEngineeringRequest(pythonPrompt), true);
+  assert.equal(isSoftwareEngineeringRequest("Write a JavaScript function to fetch active users."), true);
+  assert.equal(isSoftwareEngineeringRequest("What is the function of the human heart?"), false);
+  assert.match(worker, /function\\|class\\|script\\|source code\\|python\\|javascript/);
 });
