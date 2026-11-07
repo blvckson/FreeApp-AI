@@ -7,8 +7,9 @@ const start = worker.indexOf("function buildEngineeringFallback(prompt) {");
 const end = worker.indexOf("function targetedEngineeringFallbackNeeded(prompt, response) {", start);
 assert.ok(start >= 0 && end > start);
 const buildEngineeringFallback = vm.runInNewContext("(" + worker.slice(start, end).trim() + ")");
-const researchEnd = worker.indexOf("\nfunction formatIndependentEvidenceBrief", end);
-const buildResearchOnlyFallback = vm.runInNewContext("(" + worker.slice(end, researchEnd).trim() + ")");
+const researchStart = worker.indexOf("function buildResearchOnlyFallback(prompt, brief, modelError) {", end);
+const researchEnd = worker.indexOf("\nfunction formatIndependentEvidenceBrief", researchStart);
+const buildResearchOnlyFallback = vm.runInNewContext("(" + worker.slice(researchStart, researchEnd).trim() + ")");
 
 test("debugging fallback fixes async map/filter and preserves names", () => {
  const a = buildEngineeringFallback("Debug: async function getNames(ids){ const results = ids.map(async id => await fetchName(id)); return results.filter(x => x.active); }");
