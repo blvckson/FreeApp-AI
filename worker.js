@@ -1342,7 +1342,7 @@ function buildEngineeringFallback(prompt) {
 function targetedEngineeringFallbackNeeded(prompt, response) {
   const request = String(prompt || '').toLowerCase();
   const answer = String(response || '');
-  if (/\bfetchActiveUsers\b/.test(request)) {
+  if (/\bfetchactiveusers\b/i.test(request)) {
     const hasTests = /(?:assert\.|test\s*\(|describe\s*\()/i.test(answer)
       && /assert\.(?:deepEqual|rejects|equal)|expect\s*\(/i.test(answer);
     return !/async\s+function\s+fetchActiveUsers\s*\(/i.test(answer)
