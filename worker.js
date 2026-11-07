@@ -1162,7 +1162,7 @@ function buildEngineeringFallback(prompt) {
       "",
       "Complexity: O((V + E) log V) time and O(V + E) auxiliary space. Heap entries use the original node index, so nodes need not be mutually comparable.",
       "Run with `python -m unittest -v`. This deterministic completion has not been executed in the production service."
-    ].join("\\n");
+    ].join("\n");
   }
 
   // Scope this fallback exclusively to the failing debugging category.
