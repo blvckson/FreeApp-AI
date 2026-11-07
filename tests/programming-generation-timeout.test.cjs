@@ -16,6 +16,8 @@ test("engineering generation gets the extended timeout classifier", () => {
   assert.equal(classify([{ role: "user", content: "Explain the causes of inflation." }]), false);
   assert.equal(classify([{ role: "user", content: "Compare two historical events." }]), false);
   assert.equal(classify([{ role: "user", content: "Build a full Android app." }]), true);
+  assert.equal(classify([{ role: "user", content: "Debug this Python function." }]), false);
+  assert.equal(classify([{ role: "user", content: "Fix this JavaScript bug." }]), false);
 
   assert.match(source, /providerTimeoutMs: isProgrammingGenerationRequest\(messages\) \? 26000 : \(Number\(options\.max_tokens \|\| 0\) >= 5000 \? 18000 : 14000\)/);
   assert.match(source, /Number\(settings\.providerTimeoutMs \|\| provider\.timeoutMs\)/);
