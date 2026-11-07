@@ -13,13 +13,18 @@ test("engineering generation budget covers direct code generation", () => {
   assert.equal(classify([{ role: "user", content: "Write a Python function and include unit tests." }]), true);
 });
 
-test("engineering generation budget covers app building, debugging and repository implementation", () => {
+test("engineering generation budget covers app building and repository implementation", () => {
   for (const prompt of [
     "Build a complete Android application with local database and tests.",
-    "Debug this Kotlin crash and repair the implementation.",
     "Inspect the GitHub repository and implement the requested feature.",
     "Refactor the JavaScript backend and run its test suite."
   ]) assert.equal(classify([{ role: "user", content: prompt }]), true, prompt);
+});
+
+test("debugging prompts retain their original generation route", () => {
+  for (const prompt of ["Debug this Kotlin crash and repair the implementation.", "Fix this JavaScript bug.", "Debug this Python function."]) {
+    assert.equal(classify([{ role: "user", content: prompt }]), false, prompt);
+  }
 });
 
 test("research-only questions about software do not enter engineering generation routing", () => {
