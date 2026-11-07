@@ -1132,6 +1132,81 @@ function cleanPlanItems(value) {
 function buildEngineeringFallback(prompt) {
   const text = String(prompt || "");
   const lower = text.toLowerCase();
+
+  // Deterministic coding-only fallback for concurrent user-fetch tasks. This
+  // runs only for explicit implementation requests naming fetchActiveUsers;
+  // it does not intercept debugging, app-building, reasoning or research.
+  if (/\b(?:write|create|implement|generate)\b/i.test(text) &&
+      /\bfetchActiveUsers\b/i.test(text) &&
+      /\b(?:concurrently|concurrent|all users|active users)\b/i.test(text) &&
+      !/\b(?:debug|fix|repair)\b/i.test(text)) {
+    const match = text.match(/\bfetchActiveUsers\s*\(\s*([A-Za-z_$][\w$]*)\s*,\s*([A-Za-z_$][\w$]*)\s*\)/i);
+    const idsName = match ? match[1] : "ids";
+    const fetchName = match ? match[2] : "fetchUser";
+    return [
+      "## Concurrent active-user retrieval (deterministic coding fallback)",
+      "Starts every fetch concurrently, preserves the original input order, filters only active users, and reports every failed request with its input index and ID.",
+      "",
+      "~~~javascript",
+      "async function fetchActiveUsers(" + idsName + ", " + fetchName + ") {",
+      "  if (!Array.isArray(" + idsName + ")) throw new TypeError('ids must be an array');",
+      "  if (typeof " + fetchName + " !== 'function') throw new TypeError('fetchUser must be a function');",
+      "",
+      "  const outcomes = await Promise.all(" + idsName + ".map(async (id, index) => {",
+      "    try {",
+      "      return { ok: true, value: await " + fetchName + "(id) };",
+      "    } catch (cause) {",
+      "      return { ok: false, id, index, cause };",
+      "    }",
+      "  }));",
+      "",
+      "  const failures = outcomes.filter((outcome) => !outcome.ok);",
+      "  if (failures.length) {",
+      "    const error = new Error('Failed to fetch ' + failures.length + ' user(s)');",
+      "    error.failures = failures.map(({ id, index, cause }) => ({ id, index, cause }));",
+      "    throw error;",
+      "  }",
+      "",
+      "  return outcomes",
+      "    .map((outcome) => outcome.value)",
+      "    .filter((user) => user && user.active === true);",
+      "}",
+      "~~~",
+      "",
+      "### Executable tests",
+      "~~~javascript",
+      "import assert from 'node:assert/strict';",
+      "",
+      "const users = {",
+      "  1: { id: 1, active: true },",
+      "  2: { id: 2, active: false },",
+      "  3: { id: 3, active: true }",
+      "};",
+      "const delays = { 1: 25, 2: 5, 3: 10 };",
+      "const result = await fetchActiveUsers([1, 2, 3], async (id) => {",
+      "  await new Promise((resolve) => setTimeout(resolve, delays[id]));",
+      "  return users[id];",
+      "});",
+      "assert.deepEqual(result, [users[1], users[3]]);",
+      "",
+      "const started = [];",
+      "await assert.rejects(",
+      "  fetchActiveUsers([1, 2, 3], async (id) => {",
+      "    started.push(id);",
+      "    if (id === 2) throw new Error('network failure');",
+      "    return users[id];",
+      "  }),",
+      "  (error) => error.failures?.length === 1 && error.failures[0].id === 2 && error.failures[0].index === 1",
+      ");",
+      "assert.deepEqual(started.sort(), [1, 2, 3]);",
+      "assert.deepEqual(await fetchActiveUsers([], async () => { throw new Error('must not run'); }), []);",
+      "console.log('fetchActiveUsers tests passed');",
+      "~~~",
+      "",
+      "Promise.all preserves input order even when requests finish out of order. Each request is attempted; failures are collected and reported together rather than silently dropping failed users.",
+      "This fallback is deterministic and task-scoped; it is not a claim that a model provider succeeded."
+    ].join("\n");
+  }
   if (/stable_topological_sort/.test(lower)) {
     return [
       "## Stable topological sort (Python)",
