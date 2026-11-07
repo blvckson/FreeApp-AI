@@ -796,6 +796,7 @@ async function researchWeb(query) {
   const queries = buildResearchQueries(query).slice(0, MAX_RESEARCH_QUERIES);
   const batches = await Promise.all(queries.map(searchDuckDuckGo));
   const isCloudflareQuery = /cloudflare|workers\s+ai|model catalog|llama-3\.3-70b/i.test(query);
+  const isAndroidResearchQuery = /android|mediaprojection|screen capture|foreground service/i.test(query);
   // Mix direct primary-source candidates into relevant searches even when one
   // search result happens to be readable; this avoids treating one page as enough.
   const directCandidates = await fallbackResearchCandidates(query, { includeGeneralFallback: !isCloudflareQuery });
@@ -817,7 +818,8 @@ async function researchWeb(query) {
   const pages = await Promise.all(ranked.slice(0, Math.min(MAX_SOURCES * 2, 14)).map(fetchPage));
   let usable = pages.filter(Boolean);
   const minimumSources = isCloudflareQuery ? 2 : 3;
-  if (isCloudflareQuery || usable.length < minimumSources) {
+  // Always fetch official Android pages for capture research, even when generic search already returned enough pages.
+  if (isCloudflareQuery || isAndroidResearchQuery || usable.length < minimumSources) {
     const fallbackPages = await Promise.all(directCandidates.map(fetchPage));
     const byUrl = new Map(usable.map(page => [page.url, page]));
     for (const page of fallbackPages.filter(Boolean)) byUrl.set(page.url, page);
