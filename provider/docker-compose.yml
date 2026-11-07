@@ -1,0 +1,24 @@
+services:
+  freeapp-inference:
+    # Optional reference adapter. Replace this service with any engine that
+    # implements the provider contract in ENGINE-CONTRACT.md.
+    image: ghcr.io/ggml-org/llama.cpp:server
+    container_name: freeapp-ai-inference
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./models:/models:ro
+    environment:
+      LLAMA_ARG_MODEL: /models/${MODEL_FILE:?Set MODEL_FILE to a compatible local model filename}
+      LLAMA_ARG_HOST: 0.0.0.0
+      LLAMA_ARG_PORT: "8080"
+      LLAMA_ARG_CTX_SIZE: ${MODEL_CONTEXT_SIZE:-8192}
+      LLAMA_API_KEY: ${LLAMA_API_KEY:?Set LLAMA_API_KEY in provider/.env}
+    command: ["--model", "/models/${MODEL_FILE:?Set MODEL_FILE}", "--alias", "${MODEL_ALIAS:-freeapp-engine}", "--host", "0.0.0.0", "--port", "8080", "--ctx-size", "${MODEL_CONTEXT_SIZE:-8192}", "--api-key", "${LLAMA_API_KEY}"]
+    healthcheck:
+      test: ["CMD", "bash", "-lc", "curl -fsS http://127.0.0.1:8080/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 5m
