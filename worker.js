@@ -540,7 +540,8 @@ For substantial application requests, deliver implementation, not generic advice
         }
 
         return json({
-          result: responseText || "The AI returned no text.",\n          imageAnalysis: imageContext,
+          result: responseText || "The AI returned no text.",
+          imageAnalysis: imageContext,
           media: buildMedia(prompt, sources),
           researched: sources.length > 0,
           researchAttempted: true,
