@@ -42,7 +42,7 @@ test("fetchActiveUsers coding fallback restores concurrency, ordering, rejection
 });
 
 test("topological-sort guard accepts explicit tuple-unpacked source and target validation", () => {
-  const valid = \`def stable_topological_sort(nodes, edges):
+  const valid = `def stable_topological_sort(nodes, edges):
     node_set = set(nodes)
     for source, target in edges:
         if source not in node_set: raise ValueError("unknown source")
@@ -53,7 +53,7 @@ test("topological-sort guard accepts explicit tuple-unpacked source and target v
     def test_two(): pass
     def test_three(): pass
     def test_four(): pass
-    return "O(V + E)"\`;
+    return "O(V + E)"`;
   assert.equal(targetedEngineeringFallbackNeeded(pythonPrompt, valid), false);
 });
 
