@@ -1465,10 +1465,10 @@ function isProgrammingGenerationRequest(messages) {
   const userMessages = (messages || [])
     .filter(message => message && message.role === "user" && typeof message.content === "string");
   const text = String(userMessages[userMessages.length - 1]?.content || "");
-  // Apply the engineering generation budget to focused code, debugging,
-  // app-building and repository implementation—not to research about software.
+  // Apply the extended generation budget only to code generation, app-building
+  // and repository implementation. Debugging and reasoning retain their prior routes.
   if (isFocusedCodeGenerationRequest(messages)) return true;
-  const asksForImplementation = /\b(?:build|create|develop|implement|write|generate|debug|fix|repair|refactor|compile|test|modify|upgrade)\b/i.test(text);
+  const asksForImplementation = /\b(?:build|create|develop|implement|write|generate|refactor|compile|test|modify|upgrade)\b/i.test(text);
   const hasSoftwareTarget = /\b(?:source code|code|program|script|function|class|algorithm|android|ios|app|application|software|repository|github|workflow|pull request|api|backend|frontend|database|compiler|gradle|kotlin|javascript|typescript|python|java|rust|go|bug|stack trace|build error)\b/i.test(text);
   return asksForImplementation && hasSoftwareTarget;
 }
