@@ -790,15 +790,17 @@ async function analyzeImages(env, images, prompt, localOcrText = "") {
   for (const dataUrl of validImages) content.push({ type: "image_url", image_url: { url: dataUrl } });
 
   let visual = "";
-  try {
-    const result = await env.AI.run("@cf/meta/llama-4-scout-17b-16e-instruct", {
-      messages: [{ role: "user", content }],
-      max_tokens: 3072,
-      temperature: 0.1
-    });
-    visual = String(result?.response || "").trim();
-  } catch {
-    // OCR remains useful even if the complementary visual model is unavailable.
+  if (!localText && env.AI) {
+    try {
+      const result = await env.AI.run("@cf/meta/llama-4-scout-17b-16e-instruct", {
+        messages: [{ role: "user", content }],
+        max_tokens: 3072,
+        temperature: 0.1
+      });
+      visual = String(result?.response || "").trim();
+    } catch {
+      // Image-only analysis remains optional; local OCR text is returned independently.
+    }
   }
 
   const sections = [];
