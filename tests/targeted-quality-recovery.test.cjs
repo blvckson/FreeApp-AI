@@ -29,7 +29,10 @@ test("generated Python implementation and five unit tests execute successfully",
   const answer = buildEngineeringFallback(pythonPrompt);
   const blocks = [...answer.matchAll(/```python\n([\s\S]*?)\n```/g)].map(match => match[1]);
   assert.equal(blocks.length, 2, "implementation and test blocks must both be present");
-  const runnable = blocks.join("\n\n").replace("unittest.main()", "unittest.main(stream=__import__('sys').stdout)");
+  const runnable = blocks.join("\n\n").replace(
+    "unittest.main()",
+    "unittest.TextTestRunner(stream=__import__('sys').stdout).run(unittest.defaultTestLoader.loadTestsFromTestCase(StableTopologicalSortTests))"
+  );
   const output = execFileSync("python3", ["-c", runnable], { encoding: "utf8", timeout: 10000 });
   assert.match(output, /OK/);
 });
