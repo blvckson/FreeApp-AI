@@ -79,5 +79,6 @@ test("Python and JavaScript function requests enter the software-engineering pat
   assert.equal(isSoftwareEngineeringRequest(pythonPrompt), true);
   assert.equal(isSoftwareEngineeringRequest("Write a JavaScript function to fetch active users."), true);
   assert.equal(isSoftwareEngineeringRequest("What is the function of the human heart?"), false);
+  assert.equal(isSoftwareEngineeringRequest("What is Python?"), false);
   assert.ok(worker.includes("function|class|script|source code|python|javascript"));
 });
