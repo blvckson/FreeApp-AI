@@ -35,6 +35,7 @@ public class MainActivity extends Activity {
     private String pendingNarration = null;
     private int narrationBatch = 0;
     private volatile String lastUtteranceId = null;
+    private volatile float narrationSpeechRate = 0.90f;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -342,6 +343,15 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public void setRate(float rate) {
+            if (Float.isNaN(rate) || Float.isInfinite(rate)) return;
+            narrationSpeechRate = Math.max(0.70f, Math.min(1.30f, rate));
+            runOnUiThread(() -> {
+                if (textToSpeech != null && ttsReady) textToSpeech.setSpeechRate(narrationSpeechRate);
+            });
+        }
+
+        @JavascriptInterface
         public void stop() {
             runOnUiThread(() -> {
                 pendingNarration = null;
@@ -372,7 +382,7 @@ public class MainActivity extends Activity {
         narrationBatch++;
         int batch = narrationBatch;
         lastUtteranceId = "freeapp-narrator-" + batch + "-" + (chunks.size() - 1);
-        textToSpeech.setSpeechRate(1.0f);
+        textToSpeech.setSpeechRate(narrationSpeechRate);
         textToSpeech.setPitch(0.98f);
         for (int i = 0; i < chunks.size(); i++) {
             String id = "freeapp-narrator-" + batch + "-" + i;
