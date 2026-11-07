@@ -1,5 +1,7 @@
 const promptBox = document.getElementById("prompt");
 const imageInput = document.getElementById("image-input");
+const attachmentInput = document.getElementById("attachment-input");
+const attachmentStatus = document.getElementById("attachment-status");
 const fileStatus = document.getElementById("file-status");
 const preview = document.getElementById("preview");
 const resultBox = document.getElementById("result");
@@ -48,7 +50,14 @@ const MEMORY_TURN_COUNT_KEY = "freeapp_ai_memory_turn_count_v1";
 let persistentMemory = loadPersistentMemory();
 
 let selectedImages = [];
+let selectedAttachments = [];
 let autoNarration = false;
+const NARRATOR_SPEED_KEY = "freeapp_ai_narrator_speed_v1";
+let narratorSpeed = 0.90;
+try {
+  const savedSpeed = Number(localStorage.getItem(NARRATOR_SPEED_KEY));
+  if (Number.isFinite(savedSpeed) && savedSpeed >= 0.70 && savedSpeed <= 1.30) narratorSpeed = savedSpeed;
+} catch (_) {}
 let conversationHistory = loadConversationHistory();
 
 if (clearConversationButton) {
@@ -74,6 +83,23 @@ const builtinNarratorClose = document.getElementById("builtin-narrator-close");
 const builtinSpeakButton = document.getElementById("builtin-speak-button");
 const builtinStopButton = document.getElementById("builtin-stop-button");
 const builtinAutoButton = document.getElementById("builtin-auto-button");
+const narratorSpeedInput = document.getElementById("narrator-speed");
+const narratorSpeedValue = document.getElementById("narrator-speed-value");
+function applyNarratorSpeed() {
+  if (narratorSpeedInput) narratorSpeedInput.value = String(narratorSpeed);
+  if (narratorSpeedValue) narratorSpeedValue.textContent = narratorSpeed.toFixed(2) + "×";
+  try { localStorage.setItem(NARRATOR_SPEED_KEY, String(narratorSpeed)); } catch (_) {}
+  if (window.FreeAppNativeVoice && typeof window.FreeAppNativeVoice.setRate === "function") {
+    try { window.FreeAppNativeVoice.setRate(narratorSpeed); } catch (_) {}
+  }
+}
+applyNarratorSpeed();
+if (narratorSpeedInput) narratorSpeedInput.addEventListener("input", () => {
+  const next = Number(narratorSpeedInput.value);
+  if (!Number.isFinite(next)) return;
+  narratorSpeed = Math.min(1.30, Math.max(0.70, next));
+  applyNarratorSpeed();
+});
 
 // Keep the chat composer and answer visible; put every secondary control in
 // one compact, scrollable three-dot menu.
@@ -134,6 +160,20 @@ imageInput.addEventListener("change", () => {
     img.src = URL.createObjectURL(file);
     preview.appendChild(img);
   }
+});
+
+if (attachmentInput) attachmentInput.addEventListener("change", () => {
+  selectedAttachments = Array.from(attachmentInput.files || []).slice(0, 3);
+  const tooLarge = selectedAttachments.find(file => file.size > 100 * 1024);
+  if (tooLarge) {
+    selectedAttachments = [];
+    attachmentInput.value = "";
+    attachmentStatus.textContent = "Each text/code file must be 100 KB or smaller. No files attached.";
+    return;
+  }
+  attachmentStatus.textContent = selectedAttachments.length
+    ? selectedAttachments.length + " file(s): " + selectedAttachments.map(file => file.name).join(", ")
+    : "No files attached";
 });
 
 buildButton.addEventListener("click", askAI);
@@ -370,14 +410,14 @@ async function runWebsiteTask() {
 
 async function askAI() {
   const prompt = promptBox.value.trim();
-  if (!prompt && !selectedImages.length) {
-    statusBox.textContent = "Enter a question or attach an image first.";
+  if (!prompt && !selectedImages.length && !selectedAttachments.length) {
+    statusBox.textContent = "Enter a question or attach an image or text/code file first.";
     return;
   }
 
   // Instant local handling for greetings: never wait for a remote model just
   // to answer "hi", "hello", or "hey". Keep this path offline-capable.
-  if (prompt && !selectedImages.length && /^(hi|hello|hey|hiya|good morning|good afternoon|good evening)[!.?\s]*$/i.test(prompt)) {
+  if (prompt && !selectedImages.length && !selectedAttachments.length && /^(hi|hello|hey|hiya|good morning|good afternoon|good evening)[!.?\s]*$/i.test(prompt)) {
     const answer = "Hi! I'm FreeApp AI. I'm here and ready to help. What would you like to work on?";
     resultBox.textContent = answer;
     mediaBox.replaceChildren();
@@ -403,6 +443,12 @@ async function askAI() {
     for (const file of selectedImages) {
       images.push(await toDataUrl(file));
     }
+    const attachmentBlocks = [];
+    for (const file of selectedAttachments) {
+      const content = await readTextAttachment(file);
+      attachmentBlocks.push("\\n\\n--- ATTACHED FILE: " + file.name + " ---\\n" + content + "\\n--- END ATTACHED FILE ---");
+    }
+    const requestPrompt = prompt + attachmentBlocks.join("");
 
     const lower = prompt.toLowerCase();
     // Route explicit app/code change requests to the owner-authorized
@@ -454,7 +500,7 @@ async function askAI() {
       response = await fetch(API_BASE + "/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, images, history: conversationHistory.slice(-12), memorySummary: persistentMemory }),
+        body: JSON.stringify({ prompt: requestPrompt, images, history: conversationHistory.slice(-12), memorySummary: persistentMemory }),
         signal: requestController.signal
       });
     } catch (error) {
@@ -636,6 +682,7 @@ function speakText(text) {
   // responses can be split into safe utterance chunks on the Android side.
   if (window.FreeAppNativeVoice && typeof window.FreeAppNativeVoice.speak === "function") {
     try {
+      if (typeof window.FreeAppNativeVoice.setRate === "function") window.FreeAppNativeVoice.setRate(narratorSpeed);
       window.FreeAppNativeVoice.speak(plainText.slice(0, 12000));
       if (narratorStatus) narratorStatus.textContent = "Reading the answer aloud. Tap Stop to cancel.";
       return;
@@ -663,7 +710,7 @@ function speakText(text) {
       }
       const utterance = new SpeechSynthesisUtterance(chunks[index++].trim());
       if (preferred) utterance.voice = preferred;
-      utterance.rate = 1.0;
+      utterance.rate = narratorSpeed;
       utterance.pitch = 0.98;
       utterance.volume = 1.0;
       utterance.onend = speakNext;
@@ -677,6 +724,15 @@ function speakText(text) {
   } catch (_) {
     if (narratorStatus) narratorStatus.textContent = "Narration failed. Check your device Text-to-Speech settings.";
   }
+}
+
+function readTextAttachment(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || "").slice(0, 100000));
+    reader.onerror = () => reject(new Error("Could not read attached file: " + file.name));
+    reader.readAsText(file);
+  });
 }
 
 function toDataUrl(file) {
