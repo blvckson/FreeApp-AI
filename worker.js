@@ -770,7 +770,7 @@ async function analyzeImages(env, images, prompt) {
       if (!answer) throw new Error("OCR model returned an empty transcription.");
       extracted.push("IMAGE " + (index + 1) + " OCR:\n" + answer);
     } catch (error) {
-      ocrFailure = String(error?.message || error).replace(/bearer\\s+[^\\s,;]+/gi, "Bearer [redacted]").replace(/(?:api[_-]?key|token)\\s*[:=]\\s*[^\\s,;]+/gi, "credential=[redacted]").slice(0, 240);
+      ocrFailure = String(error?.message || error).replace(/bearer\s+[^\s,;]+/gi, "Bearer [redacted]").replace(/(?:api[_-]?key|token)\s*[:=]\s*[^\s,;]+/gi, "credential=[redacted]").slice(0, 240);
       extracted.push("IMAGE " + (index + 1) + " OCR: Dedicated text extraction was unavailable; do not assume unreadable text.");
     }
   }
