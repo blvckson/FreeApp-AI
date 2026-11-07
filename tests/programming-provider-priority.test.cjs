@@ -37,16 +37,16 @@ test("programming provider failure is explicit and sanitizes credential-like val
   assert.match(result, /No program was generated, compiled, or tested/);
 });
 
-test("engineering routing classifier includes debugging and app-building but excludes explanations", () => {
+test("engineering routing classifier includes coding and app-building but leaves debugging and explanations unchanged", () => {
   const focused = source.match(/function isFocusedCodeGenerationRequest\(messages\) \{[\s\S]*?\n\}/);
   const declaration = source.match(/function isProgrammingGenerationRequest\(messages\) \{[\s\S]*?\n\}/);
   assert.ok(declaration, "focused code-generation classifier must exist");
   assert.ok(focused && declaration, "programming classifiers must exist");
   const classify = new Function(focused[0] + "\n" + declaration[0] + "\nreturn isProgrammingGenerationRequest;")();
   assert.equal(classify([{role:"user",content:"Write a Python function first_non_repeating(s)."}]), true);
-  assert.equal(classify([{role:"user",content:"Debug this Python function."}]), true);
-  assert.equal(classify([{role:"user",content:"Fix this JavaScript bug."}]), true);
   assert.equal(classify([{role:"user",content:"Build a full Android app."}]), true);
+  assert.equal(classify([{role:"user",content:"Debug this Python function."}]), false);
+  assert.equal(classify([{role:"user",content:"Fix this JavaScript bug."}]), false);
   assert.equal(classify([{role:"user",content:"Explain this code."}]), false);
 });
 
