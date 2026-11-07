@@ -741,31 +741,66 @@ ${JSON.stringify(executed).slice(0, 3000)}
 
 async function analyzeImages(env, images, prompt) {
   if (!images.length) return "IMAGE INPUT: No image was attached.";
-  if (!env.AI) return "IMAGE INPUT: Image attached, but AI image analysis is unavailable.";
+  if (!env.AI) return "IMAGE INPUT: Image analysis is unavailable.";
 
-  const content = [{ type: "text", text: "Analyze the attached image(s) for this user request. Extract visible text, objects, UI details, errors, diagrams and other relevant evidence. Do not guess when unreadable. User request: " + prompt }];
-  for (const dataUrl of images) {
-    if (typeof dataUrl !== "string" || !dataUrl.startsWith("data:image/")) continue;
-    content.push({ type: "image_url", image_url: { url: dataUrl } });
-  }
+  const validImages = images.filter(value =>
+    typeof value === "string" && /^data:image\/(?:png|jpeg|jpg|webp|gif);base64,/i.test(value)
+  );
+  if (!validImages.length) return "IMAGE INPUT: No supported image data was received.";
 
-  try {
-    const r = await env.AI.run("@cf/meta/llama-4-scout-17b-16e-instruct", {
-      messages: [{ role: "user", content }],
-      max_tokens: 4096,
-      temperature: 0.1
-    });
-    return "IMAGE ANALYSIS:\n" + (r?.response || "No image analysis was returned.");
-  } catch {
+  // Run a dedicated OCR-capable vision model first. Moondream supports OCR,
+  // document reading and structured visual understanding on Workers AI.
+  const extracted = [];
+  let ocrFailure = null;
+  for (let index = 0; index < validImages.length; index++) {
     try {
-      const r = await env.AI.run("@cf/llava-hf/llava-1.5-7b-hf", {
-        messages: [{ role: "user", content }]
+      const result = await env.AI.run("@cf/moondream/moondream3.1-9B-A2B", {
+        task: "query",
+        image: validImages[index],
+        question: [
+          "Perform careful OCR on this image.",
+          "Transcribe all visible text exactly, preserving paragraphs, line breaks, headings, labels, numbers, punctuation and table row/column relationships where possible.",
+          "Do not correct spelling, infer missing characters, invent cropped content, or silently normalize numbers.",
+          "For text that cannot be read confidently, write [illegible] at that exact location.",
+          "If the image is rotated or contains faint, small or blurred text, inspect it carefully and state which portions remain uncertain.",
+          "Return only the transcription and a short note about unreadable areas."
+        ].join(" ")
       });
-      return "IMAGE ANALYSIS:\n" + (r?.response || "No image analysis was returned.");
-    } catch {
-      return "IMAGE INPUT: Image was attached, but detailed image analysis was unavailable.";
+      const answer = String(result?.answer || result?.response || "").trim();
+      if (!answer) throw new Error("OCR model returned an empty transcription.");
+      extracted.push("IMAGE " + (index + 1) + " OCR:\n" + answer);
+    } catch (error) {
+      ocrFailure = String(error?.message || error);
+      extracted.push("IMAGE " + (index + 1) + " OCR: Dedicated text extraction was unavailable; do not assume unreadable text.");
     }
   }
+
+  // Preserve the existing general visual analysis as a complementary path.
+  const content = [{
+    type: "text",
+    text: "Analyze the attached image(s) for the user's request. Describe relevant objects, layout, UI details, errors, diagrams and context. Do not guess text; use the OCR transcript supplied separately as the text source. User request: " + prompt
+  }];
+  for (const dataUrl of validImages) content.push({ type: "image_url", image_url: { url: dataUrl } });
+
+  let visual = "";
+  try {
+    const result = await env.AI.run("@cf/meta/llama-4-scout-17b-16e-instruct", {
+      messages: [{ role: "user", content }],
+      max_tokens: 3072,
+      temperature: 0.1
+    });
+    visual = String(result?.response || "").trim();
+  } catch {
+    // OCR remains useful even if the complementary visual model is unavailable.
+  }
+
+  const sections = [];
+  if (extracted.length) sections.push("IMAGE TEXT EXTRACTION (OCR):\n" + extracted.join("\n\n"));
+  if (visual) sections.push("ADDITIONAL IMAGE ANALYSIS:\n" + visual);
+  if (ocrFailure) sections.push("OCR STATUS: One or more images could not be processed by the dedicated OCR model. Verify uncertain text against the original image.");
+  return sections.length
+    ? sections.join("\n\n")
+    : "IMAGE INPUT: Image was attached, but text extraction and visual analysis were unavailable.";
 }
 
 function buildMedia(prompt, sources) {
