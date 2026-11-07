@@ -65,7 +65,7 @@ test("local device OCR bypasses the quota-limited hosted OCR model", async () =>
   assert.match(result, /LOCAL DEVICE OCR TRANSCRIPT/);
   assert.match(result, /INVOICE 1042/);
   assert.match(result, /92% confidence/);
-  assert.ok(!calls.some(model => model.includes("moondream")));
+  assert.equal(calls.length, 0, "local OCR must not call hosted vision models");
 });
 
 test("local OCR remains usable when the hosted AI binding is unavailable", async () => {
