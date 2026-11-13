@@ -16,7 +16,7 @@ test("programming requests prioritize configured Gemini before anonymous gateway
 
 test("programming output allowance is larger without changing other request budgets", () => {
   assert.match(source, /settings\.programming \? 9000 : 6000/);
-  assert.match(source, /providerTimeoutMs: isProgrammingGenerationRequest\(messages\) \? 26000 : \(Number\(options\.max_tokens \|\| 0\) >= 5000 \? 18000 : 14000\)/);
+  assert.match(source, /providerTimeoutMs: options\.appBuilderMode === true \? 60000 : \(isProgrammingGenerationRequest\(messages\) \? 26000 : \(Number\(options\.max_tokens \|\| 0\) >= 5000 \? 18000 : 14000\)\)/);
   assert.match(source, /retryNetworkTimeouts: !isProgrammingGenerationRequest\(messages\)/);
 });
 
@@ -61,7 +61,7 @@ test("app-building receives the engineering provider timeout and retry policy", 
   const programming = [{role:"user",content:"Write a Python function to sort a list."}];
   assert.equal(classify(appBuild), true);
   assert.equal(classify(programming), true);
-  assert.match(source, /providerTimeoutMs: isProgrammingGenerationRequest\(messages\) \? 26000 : \(Number\(options\.max_tokens \|\| 0\) >= 5000 \? 18000 : 14000\)/);
+  assert.match(source, /providerTimeoutMs: options\.appBuilderMode === true \? 60000 : \(isProgrammingGenerationRequest\(messages\) \? 26000 : \(Number\(options\.max_tokens \|\| 0\) >= 5000 \? 18000 : 14000\)\)/);
   assert.match(source, /retryNetworkTimeouts: !isProgrammingGenerationRequest\(messages\)/);
 
 });
