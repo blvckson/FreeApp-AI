@@ -1591,7 +1591,28 @@ async function runChatModel(env, messages, options = {}) {
       if (!answer) throw new Error("Cloudflare Workers AI returned no usable app-builder text.");
       return { response: answer, provider: "Cloudflare Workers AI" };
     } catch (error) {
-      providerErrors.push("Cloudflare Workers AI app-builder primary: " + String(error?.message || error).slice(0, 180));
+      const detail = String(error?.message || error);
+      providerErrors.push("Cloudflare Workers AI app-builder primary: " + detail.slice(0, 180));
+      const quotaExhausted = /4006|daily free allocation|quota exceeded|resource.?exhausted/i.test(detail);
+      if (!quotaExhausted) {
+        try {
+          const generated = await Promise.race([
+            env.AI.run(FALLBACK_MODEL, {
+              ...settings,
+              max_tokens: Math.min(settings.max_tokens || 5000, 5000),
+              temperature: Math.min(settings.temperature ?? 0.2, 0.2)
+            }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error("Cloudflare Workers AI app-builder fallback timed out.")), 30000))
+          ]);
+          const answer = extractProviderText(generated);
+          if (!answer) throw new Error("Cloudflare Workers AI fallback returned no usable app-builder text.");
+          return { response: answer, provider: "Cloudflare Workers AI" };
+        } catch (fallbackError) {
+          providerErrors.push("Cloudflare Workers AI app-builder fallback: " + String(fallbackError?.message || fallbackError).slice(0, 180));
+        }
+      } else {
+        providerErrors.push("Cloudflare Workers AI app-builder fallback skipped: daily allocation is exhausted.");
+      }
     }
   }
   // For programming requests, use an explicitly configured Gemini key first.
