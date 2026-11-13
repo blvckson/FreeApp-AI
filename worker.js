@@ -549,6 +549,9 @@ For substantial application requests, deliver implementation, not generic advice
           researchSourceCount: sources.length,
           qualityReviewUsed,
           modelIndependentFallback,
+          modelProvider: draft?.provider || null,
+          modelName: draft?.model || null,
+          aiBindingConfigured: Boolean(env.AI),
           responseMode: modelIndependentFallback ? (engineeringTask ? "deterministic-engineering-fallback" : "research-evidence-only") : "language-model",
           engineeringTask,
           engineeringPlan,
@@ -1684,10 +1687,14 @@ async function runChatModel(env, messages, options = {}) {
 
   if (env.AI) {
     try {
-      return await Promise.race([
-        env.AI.run(env.FREEAPP_AI_MODEL || DEFAULT_MODEL, settings),
-        new Promise((_, reject) => setTimeout(() => reject(new Error("Cloudflare AI request timed out.")), 10000))
+      const modelName = String(env.FREEAPP_AI_MODEL || DEFAULT_MODEL);
+      const modelResult = await Promise.race([
+        env.AI.run(modelName, settings),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Cloudflare AI request timed out.")), settings.programming ? 55000 : 30000))
       ]);
+      const modelText = extractProviderText(modelResult);
+      if (!modelText) throw new Error("Cloudflare Workers AI returned no usable assistant text.");
+      return { response: modelText, provider: "Cloudflare Workers AI", model: modelName };
     } catch (primaryError) {
       const detail = String(primaryError?.message || primaryError);
       providerErrors.push("Cloudflare AI primary: " + detail.slice(0, 140));
