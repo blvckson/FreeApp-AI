@@ -36,6 +36,6 @@ test("research-only questions about software do not enter engineering generation
 });
 
 test("generation budgets support detailed responses and larger engineering deliverables", () => {
-  assert.match(source, /providerTimeoutMs: isProgrammingGenerationRequest\(messages\) \? 26000 : \(Number\(options\.max_tokens \|\| 0\) >= 5000 \? 18000 : 14000\)/);
+  assert.match(source, /providerTimeoutMs: options\.appBuilderMode === true \? 60000 : \(isProgrammingGenerationRequest\(messages\) \? 26000 : \(Number\(options\.max_tokens \|\| 0\) >= 5000 \? 18000 : 14000\)\)/);
   assert.match(source, /max_tokens: Math\.min\(settings\.max_tokens \|\| 6000, settings\.programming \? 9000 : 6000\)/);
 });
