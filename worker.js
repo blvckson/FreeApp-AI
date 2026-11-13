@@ -323,6 +323,7 @@ export default {
         const evidence = imageContext + "\n\n" + formatIndependentEvidenceBrief(evidenceBrief);
 
         const buildMode = isComplexAppBuildRequest(prompt);
+        const appBuilderMode = body.mode === "app-builder" && buildMode;
         const researchMode = isResearchFirstRequest(prompt);
         // Research requests that discuss software, models, APIs, or development
         // must not be mistaken for requests to implement software.
@@ -430,7 +431,8 @@ For substantial application requests, deliver implementation, not generic advice
         try {
           draft = await runChatModel(env, messages, {
             max_tokens: buildMode ? 7000 : (complexity.complex ? 5000 : 4096),
-            temperature: complexity.complex ? 0.2 : 0.25
+            temperature: complexity.complex ? 0.2 : 0.25,
+            appBuilderMode
           });
           responseText = draft?.response || "";
         } catch (modelError) {
@@ -467,7 +469,7 @@ For substantial application requests, deliver implementation, not generic advice
                   "\n\nEVIDENCE AVAILABLE (untrusted source material):\n" + evidence.slice(0, 10000) +
                   "\n\nList only specific errors, omissions, unsupported claims, and improvements. If the draft is already strong, say 'No material issues found.'"
               }
-            ], { max_tokens: buildMode ? 2200 : (codeTask ? 1900 : 1500), temperature: 0.1 });
+            ], { max_tokens: buildMode ? 2200 : (codeTask ? 1900 : 1500), temperature: 0.1, appBuilderMode });
 
             const critique = (review?.response || "").trim();
             if (critique && !/^no material issues found\.?$/i.test(critique)) {
@@ -480,7 +482,7 @@ For substantial application requests, deliver implementation, not generic advice
                     critique.slice(0, 5000) +
                     "\n\nNow provide the final answer to the original request. Correct factual or logical errors, fill important omissions, follow the requested format, and keep the answer focused. Do not mention this internal review or expose private reasoning. Do not invent sources, tests, or completed actions."
                 }
-              ], { max_tokens: buildMode ? 7000 : 6000, temperature: 0.15 });
+              ], { max_tokens: buildMode ? 7000 : 6000, temperature: 0.15, appBuilderMode });
               if (revised?.response && revised.response.trim().length > 120) {
                 responseText = revised.response.trim();
                 qualityReviewUsed = true;
@@ -508,7 +510,7 @@ For substantial application requests, deliver implementation, not generic advice
                 ...messages,
                 { role: "assistant", content: responseText.slice(0, 16000) },
                 { role: "user", content: "FINAL COMPLETENESS CHECK: revise the draft to address these omissions: " + gaps.join("; ") + ". Preserve correct material, provide complete coherent implementation rather than placeholders when code is requested, and include meaningful tests with expected outcomes. For app-building, map requirements to modules and include build/run steps. Never claim execution, compilation, or test success without actual evidence. Return the complete final answer." }
-              ], { max_tokens: buildMode ? 7000 : 6000, temperature: 0.1 });
+              ], { max_tokens: buildMode ? 7000 : 6000, temperature: 0.1, appBuilderMode });
               const candidate = sanitizeAssistantOutput(repair?.response || "");
               const complete = engineeringDeliverableGaps(prompt, candidate, buildMode).length === 0;
               if (complete && candidate.length > 120) {
@@ -549,6 +551,7 @@ For substantial application requests, deliver implementation, not generic advice
           researchSourceCount: sources.length,
           qualityReviewUsed,
           modelIndependentFallback,
+          ...(appBuilderMode ? { modelProvider: draft?.provider || "unknown", aiBindingConfigured: Boolean(env.AI) } : {}),
           responseMode: modelIndependentFallback ? (engineeringTask ? "deterministic-engineering-fallback" : "research-evidence-only") : "language-model",
           engineeringTask,
           engineeringPlan,
@@ -1566,13 +1569,31 @@ async function runChatModel(env, messages, options = {}) {
     // Code tasks receive a longer generation window; all other categories
     // keep the existing timeout budget and provider ordering.
     programming,
-    providerTimeoutMs: isProgrammingGenerationRequest(messages) ? 26000 : (Number(options.max_tokens || 0) >= 5000 ? 18000 : 14000),
+    providerTimeoutMs: options.appBuilderMode === true ? 60000 : (isProgrammingGenerationRequest(messages) ? 26000 : (Number(options.max_tokens || 0) >= 5000 ? 18000 : 14000)),
+    appBuilderMode: options.appBuilderMode === true,
     // A full timeout is evidence that the route is not responding; do not
     // immediately spend the same long budget repeating that same request.
     retryNetworkTimeouts: !isProgrammingGenerationRequest(messages)
   };
 
   const providerErrors = [];
+  // The dedicated Ask.Me App Builder uses the configured Workers AI binding first.
+  // Other chat, research, coding, and debugging requests retain the existing provider order.
+  let workersAiAttempted = false;
+  if (settings.appBuilderMode && env.AI) {
+    workersAiAttempted = true;
+    try {
+      const generated = await Promise.race([
+        env.AI.run(env.FREEAPP_AI_MODEL || DEFAULT_MODEL, settings),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Cloudflare Workers AI app-builder request timed out.")), 45000))
+      ]);
+      const answer = extractProviderText(generated);
+      if (!answer) throw new Error("Cloudflare Workers AI returned no usable app-builder text.");
+      return { response: answer, provider: "Cloudflare Workers AI" };
+    } catch (error) {
+      providerErrors.push("Cloudflare Workers AI app-builder primary: " + String(error?.message || error).slice(0, 180));
+    }
+  }
   // For programming requests, use an explicitly configured Gemini key first.
   // If that route fails, continue to the independent Kilo and LLM7 providers.
   let geminiAttempted = false;
@@ -1682,7 +1703,7 @@ async function runChatModel(env, messages, options = {}) {
     providerErrors.push("Pollinations: " + String(error?.message || error).slice(0, 140));
   }
 
-  if (env.AI) {
+  if (env.AI && !workersAiAttempted) {
     try {
       return await Promise.race([
         env.AI.run(env.FREEAPP_AI_MODEL || DEFAULT_MODEL, settings),
