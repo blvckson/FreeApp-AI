@@ -38,6 +38,8 @@ test("dedicated Ask.Me App Builder prioritises Workers AI with a longer inferenc
   assert.match(source, /if \(settings\.appBuilderMode && env\.AI\)/);
   assert.match(source, /Cloudflare Workers AI app-builder request timed out\."\)\), 45000\)/);
   assert.match(source, /provider: "Cloudflare Workers AI"/);
+  assert.match(source, /FALLBACK_MODEL/);
+  assert.match(source, /Cloudflare Workers AI app-builder fallback timed out/);
   assert.match(source, /if \(env\.AI && !workersAiAttempted\)/);
   assert.match(source, /body\.mode === "app-builder" && buildMode/);
   assert.match(source, /modelProvider: draft\?\.provider/);
