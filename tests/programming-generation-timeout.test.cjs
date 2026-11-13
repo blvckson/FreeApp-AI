@@ -19,7 +19,7 @@ test("engineering generation gets the extended timeout classifier", () => {
   assert.equal(classify([{ role: "user", content: "Debug this Python function." }]), false);
   assert.equal(classify([{ role: "user", content: "Fix this JavaScript bug." }]), false);
 
-  assert.match(source, /providerTimeoutMs: isProgrammingGenerationRequest\(messages\) \? 26000 : \(Number\(options\.max_tokens \|\| 0\) >= 5000 \? 18000 : 14000\)/);
+  assert.match(source, /providerTimeoutMs: options\.appBuilderMode === true \? 60000 : \(isProgrammingGenerationRequest\(messages\) \? 26000 : \(Number\(options\.max_tokens \|\| 0\) >= 5000 \? 18000 : 14000\)\)/);
   assert.match(source, /Number\(settings\.providerTimeoutMs \|\| provider\.timeoutMs\)/);
 });
 
