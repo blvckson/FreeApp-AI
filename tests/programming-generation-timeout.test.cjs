@@ -30,3 +30,16 @@ test("programming requests do not repeat a full network timeout", () => {
   assert.match(source, /!timedOut && settings\.retryNetworkTimeouts !== false/);
   assert.match(source, /status === 408 \|\| status === 425 \|\| status >= 500/);
 });
+
+test("dedicated Ask.Me App Builder prioritises Workers AI with a longer inference window", () => {
+  const source = fs.readFileSync(path.join(__dirname, "..", "worker.js"), "utf8");
+  assert.match(source, /appBuilderMode: options\.appBuilderMode === true/);
+  assert.match(source, /options\.appBuilderMode === true \? 60000/);
+  assert.match(source, /if \(settings\.appBuilderMode && env\.AI\)/);
+  assert.match(source, /Cloudflare Workers AI app-builder request timed out\."\)\), 45000\)/);
+  assert.match(source, /provider: "Cloudflare Workers AI"/);
+  assert.match(source, /if \(env\.AI && !workersAiAttempted\)/);
+  assert.match(source, /body\.mode === "app-builder" && buildMode/);
+  assert.match(source, /modelProvider: draft\?\.provider/);
+  assert.match(source, /aiBindingConfigured: Boolean\(env\.AI\)/);
+});
