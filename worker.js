@@ -325,6 +325,9 @@ export default {
         const buildMode = isComplexAppBuildRequest(prompt);
         const appBuilderMode = body.mode === "app-builder" && buildMode;
         const workersAiOnlyMode = appBuilderMode && body.providerPolicy === "workers-ai-only";
+        if (body.providerPolicy === "workers-ai-only" && !appBuilderMode) {
+          return json({ error: "Workers-AI-only policy is available only for recognised App Builder requests." }, 400);
+        }
         const researchMode = isResearchFirstRequest(prompt);
         // Research requests that discuss software, models, APIs, or development
         // must not be mistaken for requests to implement software.
