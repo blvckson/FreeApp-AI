@@ -71,7 +71,7 @@ test("Android research has three direct official-source fallbacks", () => {
 });
 
 test("recovery is scoped and does not change reasoning or debugging classifiers", () => {
-  assert.match(worker, /if \(targetedEngineeringFallbackNeeded\(prompt, responseText\)\)/);
+  assert.match(worker, /if \(!workersAiOnlyMode && targetedEngineeringFallbackNeeded\(prompt, responseText\)\)/);
   assert.match(worker, /function isResearchFirstRequest\(prompt\)/);
   assert.match(worker, /function buildEngineeringFallback\(prompt\)/);
   assert.equal(buildEngineeringFallback("Write Python code for an unrelated parser."), "");

@@ -23,5 +23,5 @@ test("complex application and repository work retain the planning inference", ()
 
 test("planner gate is applied only to the engineering planning stage", () => {
   assert.match(source, /if \(shouldUseEngineeringPlanner\(prompt, buildMode\)\)/);
-  assert.match(source, /if \(responseText && !modelIndependentFallback && complexity\.complex && \(buildMode \|\| codeTask \|\| researchMode\)\)/);
+  assert.match(source, /if \(!workersAiOnlyMode && responseText && !modelIndependentFallback && complexity\.complex && \(buildMode \|\| codeTask \|\| researchMode\)\)/);
 });
