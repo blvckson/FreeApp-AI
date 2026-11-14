@@ -324,6 +324,7 @@ export default {
 
         const buildMode = isComplexAppBuildRequest(prompt);
         const appBuilderMode = body.mode === "app-builder" && buildMode;
+        const workersAiOnlyMode = appBuilderMode && body.providerPolicy === "workers-ai-only";
         const researchMode = isResearchFirstRequest(prompt);
         // Research requests that discuss software, models, APIs, or development
         // must not be mistaken for requests to implement software.
@@ -391,7 +392,7 @@ For substantial application requests, deliver implementation, not generic advice
 
         const engineeringTask = !researchMode && isSoftwareEngineeringRequest(prompt);
         let engineeringPlan = null;
-        if (!researchMode) {
+        if (!researchMode && !appBuilderMode) {
           if (shouldUseEngineeringPlanner(prompt, buildMode)) {
             try {
             const planResult = await runChatModel(env, [
@@ -432,10 +433,14 @@ For substantial application requests, deliver implementation, not generic advice
           draft = await runChatModel(env, messages, {
             max_tokens: buildMode ? 7000 : (complexity.complex ? 5000 : 4096),
             temperature: complexity.complex ? 0.2 : 0.25,
-            appBuilderMode
+            appBuilderMode,
+            workersAiOnly: workersAiOnlyMode
           });
           responseText = draft?.response || "";
         } catch (modelError) {
+          // Strict Workers-AI benchmark requests must fail closed: never replace
+          // a provider failure with deterministic source or another provider.
+          if (workersAiOnlyMode) throw modelError;
           // Preserve the general reasoning path. Only explicit engineering
           // tasks get scoped deterministic fallbacks when model routes fail.
           const appBuildingFallback = buildMode ? buildAppBuildingFallback(prompt, modelError) : "";
@@ -455,7 +460,7 @@ For substantial application requests, deliver implementation, not generic advice
           }
         }
 
-        if (responseText && !modelIndependentFallback && complexity.complex && (buildMode || codeTask || researchMode)) {
+        if (!workersAiOnlyMode && responseText && !modelIndependentFallback && complexity.complex && (buildMode || codeTask || researchMode)) {
           try {
             const review = await runChatModel(env, [
               {
@@ -502,7 +507,7 @@ For substantial application requests, deliver implementation, not generic advice
 
         // A final deliverable gate catches obviously incomplete engineering drafts.
         // It requests one focused repair pass; it never treats generated code as tested.
-        if (!modelIndependentFallback && (codeTask || buildMode)) {
+        if (!workersAiOnlyMode && !modelIndependentFallback && (codeTask || buildMode)) {
           const gaps = engineeringDeliverableGaps(prompt, responseText, buildMode);
           if (gaps.length) {
             try {
@@ -525,7 +530,7 @@ For substantial application requests, deliver implementation, not generic advice
 
         // Narrow deterministic recovery for repeatable coding/app-building
         // rubric failures. Reasoning and debugging routes remain unchanged.
-        if (targetedEngineeringFallbackNeeded(prompt, responseText)) {
+        if (!workersAiOnlyMode && targetedEngineeringFallbackNeeded(prompt, responseText)) {
           const deterministic = buildEngineeringFallback(prompt);
           if (deterministic) {
             responseText = deterministic;
@@ -551,7 +556,7 @@ For substantial application requests, deliver implementation, not generic advice
           researchSourceCount: sources.length,
           qualityReviewUsed,
           modelIndependentFallback,
-          ...(appBuilderMode ? { modelProvider: draft?.provider || "unknown", aiBindingConfigured: Boolean(env.AI) } : {}),
+          ...(appBuilderMode ? { modelProvider: draft?.provider || "unknown", modelName: draft?.model || null, aiBindingConfigured: Boolean(env.AI), ...(workersAiOnlyMode ? { providerPolicy: "workers-ai-only" } : {}) } : {}),
           responseMode: modelIndependentFallback ? (engineeringTask ? "deterministic-engineering-fallback" : "research-evidence-only") : "language-model",
           engineeringTask,
           engineeringPlan,
@@ -1571,12 +1576,29 @@ async function runChatModel(env, messages, options = {}) {
     programming,
     providerTimeoutMs: options.appBuilderMode === true ? 60000 : (isProgrammingGenerationRequest(messages) ? 26000 : (Number(options.max_tokens || 0) >= 5000 ? 18000 : 14000)),
     appBuilderMode: options.appBuilderMode === true,
+    workersAiOnly: options.workersAiOnly === true,
     // A full timeout is evidence that the route is not responding; do not
     // immediately spend the same long budget repeating that same request.
     retryNetworkTimeouts: !isProgrammingGenerationRequest(messages)
   };
 
   const providerErrors = [];
+  if (settings.workersAiOnly) {
+    if (!settings.appBuilderMode) throw new Error("Workers-AI-only policy is restricted to App Builder mode.");
+    if (!env.AI) throw new Error("Cloudflare Workers AI binding 'AI' is not configured.");
+    const model = String(env.FREEAPP_AI_MODEL || DEFAULT_MODEL);
+    try {
+      const generated = await Promise.race([
+        env.AI.run(model, settings),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Cloudflare Workers AI strict benchmark request timed out.")), 55000))
+      ]);
+      const answer = extractProviderText(generated);
+      if (!answer) throw new Error("Cloudflare Workers AI returned no usable strict benchmark text.");
+      return { response: answer, provider: "Cloudflare Workers AI", model };
+    } catch (error) {
+      throw new Error("Workers-AI-only benchmark failed; no other provider was attempted. " + String(error?.message || error).slice(0, 300));
+    }
+  }
   // The dedicated Ask.Me App Builder uses the configured Workers AI binding first.
   // Other chat, research, coding, and debugging requests retain the existing provider order.
   let workersAiAttempted = false;
